@@ -3,34 +3,58 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   lambdas_init
 
-  Sample SAM Template for lambdas_init
+  SAM Template for multiple Lambda functions
 
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
-    Timeout: 3
-
+    Timeout: 30
+    MemorySize: 256
     Tracing: Active
-    # You can add LoggingConfig parameters such as the Logformat, Log Group, and SystemLogLevel or ApplicationLogLevel. Learn more here https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-loggingconfig.
     LoggingConfig:
       LogFormat: JSON
+    Environment:
+      Variables:
+        POWERTOOLS_SERVICE_NAME: lambda_service
+        LOG_LEVEL: INFO
   Api:
     TracingEnabled: true
+    Cors:
+      AllowMethods: "'*'"
+      AllowHeaders: "'*'"
+      AllowOrigin: "'*'"
+
 Resources:
   HelloWorldFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function
     Properties:
-      CodeUri: hello_world/
+      CodeUri: src/hello_world/
       Handler: app.lambda_handler
       Runtime: python3.13
       Architectures:
-      - x86_64
+        - x86_64
       Events:
-        HelloWorld:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+        ApiEvent:
+          Type: Api
           Properties:
             Path: /hello
             Method: get
+
+  ProcessDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/process_data/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      MemorySize: 512
+      Timeout: 60
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /process
+            Method: post
 
 
 Outputs:
