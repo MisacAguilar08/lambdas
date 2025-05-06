@@ -34,7 +34,7 @@ Globals:
           FunctionPayloadType: TOKEN
           Identity:
             Header: Authorization
-            ValidationExpression: "^Bearer [-0-9a-zA-Z\._]*$"
+            ValidationExpression: '^Bearer [-0-9a-zA-Z\._]*$'
             ReauthorizeEvery: 300
 
 Resources:
