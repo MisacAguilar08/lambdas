@@ -29,7 +29,7 @@ Resources:
     Properties:
       CodeUri: src/hello_world/
       Handler: app.lambda_handler
-      Runtime: python3.13
+      Runtime: python3.11
       Architectures:
         - x86_64
       Events:
@@ -44,7 +44,7 @@ Resources:
     Properties:
       CodeUri: src/process_data/
       Handler: app.lambda_handler
-      Runtime: python3.13
+      Runtime: python3.11
       Architectures:
         - x86_64
       MemorySize: 512
