@@ -24,6 +24,16 @@ Globals:
       AllowOrigin: "'*'"
 
 Resources:
+  CommonDependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: common-dependencies
+      Description: Common dependencies for Lambda functions
+      ContentUri: layers/
+      CompatibleRuntimes:
+        - python3.11
+      RetentionPolicy: Retain
+
   HelloWorldFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -32,6 +42,8 @@ Resources:
       Runtime: python3.11
       Architectures:
         - x86_64
+      Layers:
+        - !Ref CommonDependenciesLayer
       Events:
         ApiEvent:
           Type: Api
@@ -49,12 +61,22 @@ Resources:
         - x86_64
       MemorySize: 512
       Timeout: 60
+      Layers:
+        - !Ref CommonDependenciesLayer
       Events:
         ApiEvent:
           Type: Api
           Properties:
             Path: /process
             Method: post
+
+Outputs:
+  CommonDependenciesLayerArn:
+    Description: ARN of the common dependencies layer
+    Value: !Ref CommonDependenciesLayer
+  CommonDependenciesLayerVersion:
+    Description: Version of the common dependencies layer
+    Value: !Ref CommonDependenciesLayer
 
 
 Outputs:
