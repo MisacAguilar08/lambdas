@@ -158,6 +158,7 @@ Outputs:
     Value: !GetAtt ProcessDataFunction.Arn
   CustomAuthorizerFunctionArn:
     Description: Custom Authorizer Lambda Function ARN
-    Value: !GetAtt CustomAuthorizerFunction.Arn  TokenGeneratorFunctionArn:
+    Value: !GetAtt CustomAuthorizerFunction.Arn
+  TokenGeneratorFunctionArn:
     Description: Token Generator Lambda Function ARN
     Value: !GetAtt TokenGeneratorFunction.Arn
