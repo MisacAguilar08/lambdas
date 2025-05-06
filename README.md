@@ -1,6 +1,6 @@
 # AWS Lambda Project with SAM
 
-Este proyecto demuestra cómo configurar múltiples funciones Lambda usando AWS SAM (Serverless Application Model) con una capa compartida de dependencias (Lambda Layer).
+Este proyecto demuestra cómo configurar múltiples funciones Lambda usando AWS SAM (Serverless Application Model) con una capa compartida de dependencias (Lambda Layer) y autenticación mediante Custom Authorizer.
 
 ## Estructura del Proyecto
 
@@ -16,9 +16,12 @@ Este proyecto demuestra cómo configurar múltiples funciones Lambda usando AWS 
 │   ├── hello_world/            # Primera función Lambda
 │   │   ├── app.py              # Código de la función
 │   │   └── requirements.txt     # Dependencias específicas (si las hay)
-│   └── process_data/           # Segunda función Lambda
-│       ├── app.py              # Código de la función
-│       └── requirements.txt     # Dependencias específicas (si las hay)
+│   ├── process_data/           # Segunda función Lambda
+│   │   ├── app.py              # Código de la función
+│   │   └── requirements.txt     # Dependencias específicas (si las hay)
+│   └── authorizer/             # Custom Authorizer Lambda
+│       ├── app.py              # Código del authorizer
+│       └── requirements.txt     # Dependencias específicas
 ├── template.yaml               # Plantilla SAM
 └── Makefile                   # Comandos útiles para el desarrollo
 ```
@@ -44,6 +47,8 @@ Las dependencias compartidas se especifican en `layers/requirements.txt`:
 - pandas
 - numpy
 - pytz
+- PyJWT
+- pytest
 
 ### 2. Funciones Lambda
 
@@ -52,6 +57,7 @@ Cada función Lambda está configurada en `template.yaml` y usa la layer compart
 HelloWorldFunction:
   Type: AWS::Serverless::Function
   Properties:
+    FunctionName: !Sub ${AWS::StackName}-hello-world
     CodeUri: src/hello_world/
     Handler: app.lambda_handler
     Runtime: python3.11
@@ -59,7 +65,30 @@ HelloWorldFunction:
       - !Ref CommonDependenciesLayer
 ```
 
-### 3. GitHub Actions Workflow
+### 3. Custom Authorizer
+
+El proyecto utiliza un Custom Authorizer para proteger los endpoints de la API:
+
+```yaml
+Auth:
+  DefaultAuthorizer: CustomAuthorizer
+  Authorizers:
+    CustomAuthorizer:
+      FunctionArn: !GetAtt CustomAuthorizerFunction.Arn
+      FunctionPayloadType: TOKEN
+      Identity:
+        Header: Authorization
+        ValidationExpression: "^Bearer [-0-9a-zA-Z\._]*$"
+        ReauthorizeEvery: 300
+```
+
+#### Características del Authorizer:
+- Validación de tokens JWT
+- Reautorización cada 5 minutos
+- Validación estricta del formato del token
+- Integración con secretos para la firma JWT
+
+### 4. GitHub Actions Workflow
 
 El workflow (`.github/workflows/deploy-lambda.yml`) automatiza el despliegue:
 
@@ -137,41 +166,61 @@ El Makefile proporciona comandos útiles:
 ## Secretos Necesarios en GitHub
 
 Para el despliegue automático, configurar en GitHub:
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_REGION`
+- `AWS_ACCESS_KEY_ID`: ID de clave de acceso de AWS
+- `AWS_SECRET_ACCESS_KEY`: Clave secreta de acceso de AWS
+- `AWS_REGION`: Región de AWS donde se desplegará
+- `AUTH_TOKEN_SECRET`: Secreto para firmar y validar tokens JWT
 
 ## Endpoints API
 
 1. Hello World Function
    - Path: `/hello`
    - Método: GET
-   - Autenticación: Requiere Custom Authorizer
+   - Autenticación: Requiere token JWT válido
    - Retorna: Mensaje de saludo y timestamp
 
 2. Process Data Function
    - Path: `/process`
    - Método: POST
-   - Autenticación: Requiere Custom Authorizer
+   - Autenticación: Requiere token JWT válido
    - Retorna: Estadísticas de datos procesados
 
-## Custom Authorizer
+### Autenticación de Endpoints
 
-El proyecto utiliza un Custom Authorizer para proteger los endpoints de la API. Este autorizer valida los tokens JWT en las peticiones.
+Todos los endpoints requieren autenticación mediante token JWT:
 
-### Configuración del Authorizer
+1. **Header Requerido**:
+   ```
+   Authorization: Bearer <token>
+   ```
 
-1. **Headers Requeridos**
-   - Todas las peticiones deben incluir el header: `Authorization: Bearer <token>`
+2. **Formato del Token**:
+   - Debe ser un JWT válido
+   - Firmado con el secreto configurado en AUTH_TOKEN_SECRET
+   - Debe incluir claims estándar (sub, exp, iat)
 
-2. **Formato del Token**
-   - El token debe ser un JWT válido
-   - Debe contener los claims necesarios (sub, exp, iat)
+3. **Ejemplo de Uso**:
+   ```bash
+   # Petición GET
+   curl -X GET https://your-api.execute-api.region.amazonaws.com/Prod/hello \
+     -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+     -H "Content-Type: application/json"
 
-3. **Implementación**
-   - El authorizer está implementado en `src/authorizer/app.py`
-   - Valida la estructura y firma del token
-   - Genera una política IAM que permite o deniega el acceso
+   # Petición POST
+   curl -X POST https://your-api.execute-api.region.amazonaws.com/Prod/process \
+     -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+     -H "Content-Type: application/json" \
+     -d '{"data": "example"}'
+   ```
+
+### Headers CORS Permitidos
+
+Los endpoints permiten los siguientes headers CORS:
+- Content-Type
+- X-Amz-Date
+- Authorization
+- X-Api-Key
+- X-Amz-Security-Token
 
 ### Ejemplo de Uso
 

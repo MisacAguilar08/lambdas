@@ -1,9 +1,13 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  lambdas_init
+  lambdas_init - SAM Template for multiple Lambda functions with Custom Authorizer
 
-  SAM Template for multiple Lambda functions
+Parameters:
+  AuthTokenSecret:
+    Type: String
+    NoEcho: true
+    Description: Secret key for JWT token validation
 
 Globals:
   Function:
@@ -19,32 +23,22 @@ Globals:
   Api:
     TracingEnabled: true
     Cors:
-      AllowMethods: "'*'"
-      AllowHeaders: "'*'"
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
       AllowOrigin: "'*'"
+    Auth:
+      DefaultAuthorizer: CustomAuthorizer
+      Authorizers:
+        CustomAuthorizer:
+          FunctionArn: !GetAtt CustomAuthorizerFunction.Arn
+          FunctionPayloadType: TOKEN
+          Identity:
+            Header: Authorization
+            ValidationExpression: "^Bearer [-0-9a-zA-Z\._]*$"
+            ReauthorizeEvery: 300
 
 Resources:
-  CustomAuthorizerFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/authorizer/
-      Handler: app.lambda_handler
-      Runtime: python3.11
-      Architectures:
-        - x86_64
-      Layers:
-        - !Ref CommonDependenciesLayer
-      Environment:
-        Variables:
-          AUTH_TOKEN_SECRET: !Ref AuthTokenSecret
-
-  CustomAuthorizerPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt CustomAuthorizerFunction.Arn
-      Principal: apigateway.amazonaws.com
-
+  # Lambda Layer for common dependencies
   CommonDependenciesLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -55,9 +49,34 @@ Resources:
         - python3.11
       RetentionPolicy: Retain
 
+  # Custom Authorizer Lambda Function
+  CustomAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-custom-authorizer
+      CodeUri: src/authorizer/
+      Handler: app.lambda_handler
+      Runtime: python3.11
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref CommonDependenciesLayer
+      Environment:
+        Variables:
+          AUTH_TOKEN_SECRET: !Ref AuthTokenSecret
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'execute-api:Invoke'
+              Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*'
+
+  # Hello World Lambda Function
   HelloWorldFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub ${AWS::StackName}-hello-world
       CodeUri: src/hello_world/
       Handler: app.lambda_handler
       Runtime: python3.11
@@ -70,11 +89,13 @@ Resources:
           Type: Api
           Properties:
             Path: /hello
-            Method: get            Auth:
-              Authorizer: CustomAuthorizer
+            Method: get
+
+  # Process Data Lambda Function
   ProcessDataFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub ${AWS::StackName}-process-data
       CodeUri: src/process_data/
       Handler: app.lambda_handler
       Runtime: python3.11
@@ -91,25 +112,27 @@ Resources:
             Path: /process
             Method: post
 
-Outputs:            Auth:
-              Authorizer: CustomAuthorizer  CommonDependenciesLayerArn:
+Outputs:
+  # API Gateway Outputs
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+  # Layer Outputs
+  CommonDependenciesLayerArn:
     Description: ARN of the common dependencies layer
     Value: !Ref CommonDependenciesLayer
   CommonDependenciesLayerVersion:
     Description: Version of the common dependencies layer
     Value: !Ref CommonDependenciesLayer
 
-
-Outputs:
-  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
-  # Find out more about other implicit resources you can reference within SAM
-  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
-  HelloWorldApi:
-    Description: API Gateway endpoint URL for Prod stage for Hello World function
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
-  HelloWorldFunction:
+  # Function Outputs
+  HelloWorldFunctionArn:
     Description: Hello World Lambda Function ARN
     Value: !GetAtt HelloWorldFunction.Arn
-  HelloWorldFunctionIamRole:
-    Description: Implicit IAM Role created for Hello World function
-    Value: !GetAtt HelloWorldFunctionRole.Arn
+  ProcessDataFunctionArn:
+    Description: Process Data Lambda Function ARN
+    Value: !GetAtt ProcessDataFunction.Arn
+  CustomAuthorizerFunctionArn:
+    Description: Custom Authorizer Lambda Function ARN
+    Value: !GetAtt CustomAuthorizerFunction.Arn
