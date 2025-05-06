@@ -47,9 +47,11 @@ jobs:
           tree -a -I '.git|.aws-sam'
       - name: Build Lambda Layer
         run: |
-
-
-          echo "Building Lambda Layer..."          pip install -r layers/requirements.txt -t layers/python/          make build-layer
+          echo "Building Lambda Layer..."
+          pip install -r layers/requirements.txt -t layers/python/
+          if [ -f "Makefile" ]; then
+            make build-layer
+          fi
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -86,8 +88,8 @@ jobs:
             --force-upload \
             --no-progressbar \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }} \
-            --region ${{ secrets.AWS_REGION }} 2>&1 || true
+            --region "${{ secrets.AWS_REGION }}" \
+            --parameter-overrides "AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}" 2>&1 || true
           
           # Esperar un momento para asegurar que el stack se actualice
           sleep 10
