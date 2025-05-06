@@ -90,14 +90,40 @@ Auth:
 
 ### 4. GitHub Actions Workflow
 
-El workflow (`.github/workflows/deploy-lambda.yml`) automatiza el despliegue:
+El workflow (`.github/workflows/deploy-lambda.yml`) automatiza el despliegue y se ejecuta en las siguientes situaciones:
 
+1. **Push a main** (solo archivos relevantes):
+   - Cambios en `/src/**`
+   - Cambios en `/layers/**`
+   - Cambios en `template.yaml`
+
+2. **Pull Requests a main**:
+   - Verifica el build y despliegue
+   - Solo para cambios en código y configuración
+
+3. **Creación de Release**:
+   - Se ejecuta automáticamente al crear un nuevo release
+   - Ideal para despliegues a producción
+
+4. **Manual (workflow_dispatch)**:
+   - Puede ser ejecutado manualmente desde GitHub
+   - Permite seleccionar el ambiente (dev/staging/prod)
+   - Opción para habilitar logs de debug
+
+El workflow realiza las siguientes acciones:
 1. Configura el entorno Python
 2. Instala dependencias del sistema
 3. Instala AWS SAM CLI
 4. Construye la Lambda Layer
 5. Configura credenciales AWS
 6. Construye y despliega la aplicación
+
+Para ejecutar manualmente:
+1. Ir a la pestaña "Actions" en GitHub
+2. Seleccionar "Deploy Lambda"
+3. Click en "Run workflow"
+4. Seleccionar la rama y configurar opciones
+5. Click en "Run workflow"
 
 ### 4. Makefile
 
@@ -171,33 +197,161 @@ Para el despliegue automático, configurar en GitHub:
 - `AWS_REGION`: Región de AWS donde se desplegará
 - `AUTH_TOKEN_SECRET`: Secreto para firmar y validar tokens JWT
 
+## Monitoreo y Solución de Problemas
+
+### CloudWatch Logs
+
+Cada función genera logs en formato JSON con la siguiente información:
+- Timestamp
+- Nivel de log (INFO, ERROR, etc.)
+- Nombre del servicio
+- Detalles de la solicitud/respuesta
+- Trazas de error (si aplica)
+
+Para ver los logs:
+1. Ir a CloudWatch en la consola AWS
+2. Navegar a Log Groups
+3. Buscar el grupo correspondiente a la función:
+   - `/aws/lambda/lambdas-init-hello-world`
+   - `/aws/lambda/lambdas-init-process-data`
+   - `/aws/lambda/lambdas-init-custom-authorizer`
+   - `/aws/lambda/lambdas-init-token-generator`
+
+### X-Ray Tracing
+
+El proyecto tiene habilitado X-Ray para todas las funciones:
+- Visualización de latencias
+- Identificación de cuellos de botella
+- Análisis de dependencias entre servicios
+- Mapeo de errores en la cadena de llamadas
+
+### Problemas Comunes
+
+1. **Error: Token inválido**
+   - Verificar que el token no haya expirado
+   - Asegurar que AUTH_TOKEN_SECRET sea el mismo usado para generar el token
+   - Validar el formato del header Authorization
+
+2. **Error: Unable to upload artifact**
+   - Verificar que existe el directorio layers/python
+   - Asegurar que requirements.txt está presente
+   - Confirmar que las dependencias se instalaron correctamente
+
+3. **Error: Deployment failed**
+   - Revisar los logs de CloudFormation
+   - Verificar permisos de IAM
+   - Comprobar límites de servicio AWS
+
+### Métricas Importantes
+
+CloudWatch recopila automáticamente:
+- Invocaciones por función
+- Errores y timeouts
+- Duración de ejecución
+- Memoria utilizada
+- Concurrencia
+
+## Mejores Prácticas
+
+### Desarrollo
+- Usar entornos virtuales para desarrollo local
+- Mantener requirements.txt actualizado
+- Seguir principios de IaC (Infrastructure as Code)
+- Implementar pruebas unitarias
+
+### Seguridad
+- Rotar regularmente AUTH_TOKEN_SECRET
+- Mantener las dependencias actualizadas
+- Usar el principio de mínimo privilegio en IAM
+- Implementar rate limiting en API Gateway
+
+### Operaciones
+- Monitorear costos regularmente
+- Configurar alarmas para errores y latencia
+- Mantener documentación actualizada
+- Realizar backups de configuración
+
 ## Endpoints API
 
-1. Hello World Function
+1. Token Generator Function
+   - Path: `/token`
+   - Método: POST
+   - Autenticación: No requiere
+   - Cuerpo de la solicitud:
+     ```json
+     {
+         "user_id": "tu-id-de-usuario"
+     }
+     ```
+   - Respuesta:
+     ```json
+     {
+         "token": "eyJhbGciOiJIUzI1NiIs...",
+         "expires_in": 86400,
+         "token_type": "Bearer"
+     }
+     ```
+
+2. Hello World Function
    - Path: `/hello`
    - Método: GET
    - Autenticación: Requiere token JWT válido
    - Retorna: Mensaje de saludo y timestamp
+   - Ejemplo de uso:
+     ```bash
+     curl https://tu-api.execute-api.region.amazonaws.com/Prod/hello \
+       -H "Authorization: Bearer tu-token-aquí"
+     ```
 
-2. Process Data Function
+3. Process Data Function
    - Path: `/process`
    - Método: POST
    - Autenticación: Requiere token JWT válido
    - Retorna: Estadísticas de datos procesados
+   - Ejemplo de uso:
+     ```bash
+     curl -X POST https://tu-api.execute-api.region.amazonaws.com/Prod/process \
+       -H "Authorization: Bearer tu-token-aquí" \
+       -H "Content-Type: application/json" \
+       -d '{"data": "ejemplo"}'
+     ```
 
 ### Autenticación de Endpoints
 
-Todos los endpoints requieren autenticación mediante token JWT:
+Todos los endpoints (excepto `/token`) requieren autenticación mediante token JWT:
 
-1. **Header Requerido**:
+1. **Obtención del Token**:
+   ```bash
+   curl -X POST https://tu-api.execute-api.region.amazonaws.com/Prod/token \
+     -H "Content-Type: application/json" \
+     -d '{"user_id": "123"}'
+   ```
+
+2. **Header Requerido**:
    ```
    Authorization: Bearer <token>
    ```
 
-2. **Formato del Token**:
+3. **Formato del Token**:
    - Debe ser un JWT válido
    - Firmado con el secreto configurado en AUTH_TOKEN_SECRET
-   - Debe incluir claims estándar (sub, exp, iat)
+   - Debe incluir claims estándar:
+     - `sub`: ID del usuario
+     - `exp`: Tiempo de expiración (24 horas desde la emisión)
+     - `iat`: Tiempo de emisión
+     - `iss`: Emisor del token (lambda-api)
+
+4. **Manejo de Errores**:
+   - Token expirado: HTTP 401
+   - Token inválido: HTTP 401
+   - Token mal formado: HTTP 400
+   - Token faltante: HTTP 401
+
+5. **Seguridad**:
+   - Los tokens expiran después de 24 horas
+   - El authorizer revalida los tokens cada 5 minutos
+   - Se utiliza HTTPS para todas las comunicaciones
+   - Los tokens son firmados con HS256
 
 3. **Ejemplo de Uso**:
    ```bash
