@@ -112,6 +112,29 @@ Resources:
             Path: /process
             Method: post
 
+  # Token Generator Function
+  TokenGeneratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-token-generator
+      CodeUri: src/token_generator/
+      Handler: app.lambda_handler
+      Runtime: python3.11
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref CommonDependenciesLayer
+      Environment:
+        Variables:
+          AUTH_TOKEN_SECRET: !Ref AuthTokenSecret
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /token
+            Method: post
+            Auth: NONE  # Este endpoint no requiere autorización
+
 Outputs:
   # API Gateway Outputs
   ApiEndpoint:
@@ -135,4 +158,6 @@ Outputs:
     Value: !GetAtt ProcessDataFunction.Arn
   CustomAuthorizerFunctionArn:
     Description: Custom Authorizer Lambda Function ARN
-    Value: !GetAtt CustomAuthorizerFunction.Arn
+    Value: !GetAtt CustomAuthorizerFunction.Arn  TokenGeneratorFunctionArn:
+    Description: Token Generator Lambda Function ARN
+    Value: !GetAtt TokenGeneratorFunction.Arn
