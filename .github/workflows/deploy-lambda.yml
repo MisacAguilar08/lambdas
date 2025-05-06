@@ -31,6 +31,10 @@ jobs:
 
       - name: Build Lambda Layer
         run: |
+          ls -la
+          echo "Current directory structure:"
+          find . -type f -not -path '*/\.*'
+          echo "Building Lambda Layer..."
           make build-layer
 
       - name: Configure AWS Credentials
@@ -49,12 +53,19 @@ jobs:
           fi
 
       - name: SAM Build
-        run: sam build --use-container
+        run: |
+          echo "Running SAM build..."
+          sam build --use-container
+          echo "SAM build complete. Contents of .aws-sam:"
+          ls -la .aws-sam/
 
       - name: SAM Deploy
         run: |
-          sam deploy --stack-name lambdas-init \
+          echo "Starting SAM deploy..."
+          sam deploy \
+            --stack-name lambdas-init \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --capabilities CAPABILITY_IAM \
             --parameter-overrides AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}
+          echo "SAM deploy complete"
