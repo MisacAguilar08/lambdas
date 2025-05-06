@@ -79,7 +79,7 @@ jobs:
         run: |
           echo "Starting SAM deploy..."
           
-          # Ejecutar SAM deploy con --force-upload para evitar problemas de S3
+          # Ejecutar SAM deploy con --resolve-s3 para crear un bucket automáticamente
           sam deploy \
             --template-file .aws-sam/build/template.yaml \
             --stack-name lambdas-init \
@@ -89,6 +89,7 @@ jobs:
             --no-progressbar \
             --capabilities CAPABILITY_IAM \
             --region "${{ secrets.AWS_REGION }}" \
+            --resolve-s3 \
             --parameter-overrides "AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}" 2>&1 || true
           
           # Esperar un momento para asegurar que el stack se actualice
