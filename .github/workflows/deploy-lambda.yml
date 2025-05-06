@@ -56,4 +56,5 @@ jobs:
           sam deploy --stack-name lambdas-init \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --capabilities CAPABILITY_IAM
+            --capabilities CAPABILITY_IAM \
+          --parameter-overrides AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}
