@@ -24,6 +24,27 @@ Globals:
       AllowOrigin: "'*'"
 
 Resources:
+  CustomAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/authorizer/
+      Handler: app.lambda_handler
+      Runtime: python3.11
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref CommonDependenciesLayer
+      Environment:
+        Variables:
+          AUTH_TOKEN_SECRET: !Ref AuthTokenSecret
+
+  CustomAuthorizerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt CustomAuthorizerFunction.Arn
+      Principal: apigateway.amazonaws.com
+
   CommonDependenciesLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -49,8 +70,8 @@ Resources:
           Type: Api
           Properties:
             Path: /hello
-            Method: get
-
+            Method: get            Auth:
+              Authorizer: CustomAuthorizer
   ProcessDataFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -70,8 +91,8 @@ Resources:
             Path: /process
             Method: post
 
-Outputs:
-  CommonDependenciesLayerArn:
+Outputs:            Auth:
+              Authorizer: CustomAuthorizer  CommonDependenciesLayerArn:
     Description: ARN of the common dependencies layer
     Value: !Ref CommonDependenciesLayer
   CommonDependenciesLayerVersion:
