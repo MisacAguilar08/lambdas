@@ -21,21 +21,35 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential python3-dev
+          sudo apt-get install -y build-essential python3-dev tree
 
       - name: Install AWS SAM CLI and build tools
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade setuptools wheel
           python -m pip install aws-sam-cli
-
+      - name: Verify Project Structure
+        run: |
+          echo "Verificando estructura del proyecto..."
+          if [ ! -d "layers" ]; then
+            echo "Error: Directorio 'layers' no encontrado"
+            exit 1
+          fi
+          if [ ! -d "layers/python" ]; then
+            echo "Creando directorio layers/python..."
+            mkdir -p layers/python
+          fi
+          if [ ! -f "layers/requirements.txt" ]; then
+            echo "Error: Archivo layers/requirements.txt no encontrado"
+            exit 1
+          fi
+          echo "Estructura del proyecto:"
+          tree -a -I '.git|.aws-sam'
       - name: Build Lambda Layer
         run: |
-          ls -la
-          echo "Current directory structure:"
-          find . -type f -not -path '*/\.*'
-          echo "Building Lambda Layer..."
-          make build-layer
+
+
+          echo "Building Lambda Layer..."          pip install -r layers/requirements.txt -t layers/python/          make build-layer
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -62,10 +76,34 @@ jobs:
       - name: SAM Deploy
         run: |
           echo "Starting SAM deploy..."
+          # Verificar si el stack existe
+          if ! aws cloudformation describe-stacks --stack-name lambdas-init 2>/dev/null; then
+            echo "Stack no existe, creando nuevo stack..."
+          else
+            echo "Stack existe, actualizando..."
+          fi
+
+          # Ejecutar SAM deploy con debug
           sam deploy \
+            --debug \
             --stack-name lambdas-init \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}
-          echo "SAM deploy complete"
+            --parameter-overrides AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }} || exit 1
+
+          # Verificar el estado del stack después del despliegue
+          echo "Verificando estado del stack..."
+          aws cloudformation describe-stacks \
+            --stack-name lambdas-init \
+            --query 'Stacks[0].StackStatus' \
+            --output text
+
+          # Obtener las URLs de los endpoints si el despliegue fue exitoso
+          if [ $? -eq 0 ]; then
+            echo "Obteniendo información del stack..."
+            aws cloudformation describe-stacks \
+              --stack-name lambdas-init \
+              --query 'Stacks[0].Outputs' \
+              --output table
+          fi
