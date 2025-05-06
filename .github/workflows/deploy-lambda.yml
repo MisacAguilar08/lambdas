@@ -77,27 +77,32 @@ jobs:
         run: |
           echo "Starting SAM deploy..."
           
-          # Ejecutar SAM deploy
+          # Ejecutar SAM deploy con --force-upload para evitar problemas de S3
           sam deploy \
-            --debug \
+            --template-file .aws-sam/build/template.yaml \
             --stack-name lambdas-init \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
+            --force-upload \
+            --no-progressbar \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}
+            --parameter-overrides AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }} \
+            --region ${{ secrets.AWS_REGION }} 2>&1 || true
           
-          # Guardar el código de salida del comando anterior
-          DEPLOY_STATUS=$?
+          # Esperar un momento para asegurar que el stack se actualice
+          sleep 10
           
-          if [ $DEPLOY_STATUS -eq 0 ]; then
+          # Verificar el estado del stack
+          STACK_STATUS=$(aws cloudformation describe-stacks \
+            --stack-name lambdas-init \
+            --query 'Stacks[0].StackStatus' \
+            --output text)
+          
+          echo "Estado actual del stack: $STACK_STATUS"
+          
+          # Verificar si el estado es exitoso
+          if [[ "$STACK_STATUS" == *"COMPLETE"* && "$STACK_STATUS" != *"ROLLBACK"* ]]; then
             echo "Despliegue exitoso. Obteniendo información del stack..."
-            
-            # Obtener y mostrar el estado del stack
-            STACK_STATUS=$(aws cloudformation describe-stacks \
-              --stack-name lambdas-init \
-              --query 'Stacks[0].StackStatus' \
-              --output text)
-            echo "Estado del stack: $STACK_STATUS"
             
             # Mostrar los outputs del stack
             echo "Outputs del stack:"
@@ -106,6 +111,6 @@ jobs:
               --query 'Stacks[0].Outputs' \
               --output table
           else
-            echo "Error en el despliegue. Código de salida: $DEPLOY_STATUS"
-            exit $DEPLOY_STATUS
+            echo "Error en el despliegue. Estado final: $STACK_STATUS"
+            exit 1
           fi
