@@ -197,6 +197,148 @@ Para el despliegue automático, configurar en GitHub:
 - `AWS_REGION`: Región de AWS donde se desplegará
 - `AUTH_TOKEN_SECRET`: Secreto para firmar y validar tokens JWT
 
+## Sistema de Autenticación
+
+### Tokens de Autenticación
+
+El sistema implementa un mecanismo de autenticación basado en dos tipos de tokens JWT:
+
+#### Access Token
+
+El access_token es un token JWT de corta duración que se utiliza para autenticar las solicitudes a los endpoints protegidos de la API.
+
+**Características:**
+- **Duración:** 1 hora
+- **Propósito:** Autenticación de solicitudes a la API
+- **Formato:** JWT (JSON Web Token)
+- **Algoritmo:** HS256
+- **Claims:**
+  ```json
+  {
+    "sub": "user123",           // ID del usuario
+    "iat": 1234567890,         // Timestamp de emisión
+    "exp": 1234571490,         // Timestamp de expiración
+    "iss": "lambda-api",       // Emisor del token
+    "type": "access"           // Tipo de token
+  }
+  ```
+
+**Uso en Solicitudes:**
+```http
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+#### Refresh Token
+
+El refresh_token es un token JWT de larga duración que permite obtener nuevos access_tokens sin necesidad de volver a autenticarse.
+
+**Características:**
+- **Duración:** 7 días
+- **Propósito:** Renovar access_tokens expirados
+- **Formato:** JWT (JSON Web Token)
+- **Algoritmo:** HS256
+- **Claims:**
+  ```json
+  {
+    "sub": "user123",           // ID del usuario
+    "iat": 1234567890,         // Timestamp de emisión
+    "exp": 1235172690,         // Timestamp de expiración (7 días)
+    "iss": "lambda-api",       // Emisor del token
+    "type": "refresh"          // Tipo de token
+  }
+  ```
+
+### Endpoints de Autenticación
+
+#### 1. Generar Tokens
+
+**Endpoint:** `/token`
+**Método:** POST
+
+**Request:**
+```json
+{
+    "grant_type": "password",
+    "user_id": "user123"
+}
+```
+
+**Response:**
+```json
+{
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+    "expires_in": 3600,
+    "token_type": "Bearer"
+}
+```
+
+#### 2. Renovar Access Token
+
+**Endpoint:** `/token`
+**Método:** POST
+
+**Request:**
+```json
+{
+    "grant_type": "refresh_token",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+**Response:**
+```json
+{
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "expires_in": 3600,
+    "token_type": "Bearer"
+}
+```
+
+### Manejo de Errores
+
+Los endpoints de autenticación pueden devolver los siguientes errores:
+
+1. **401 Unauthorized:**
+   ```json
+   {
+       "error": "Refresh token expirado"
+   }
+   ```
+   ```json
+   {
+       "error": "Refresh token inválido"
+   }
+   ```
+
+2. **400 Bad Request:**
+   ```json
+   {
+       "error": "grant_type inválido"
+   }
+   ```
+   ```json
+   {
+       "error": "user_id es requerido"
+   }
+   ```
+
+### Buenas Prácticas de Seguridad
+
+1. **Almacenamiento:**
+   - Access Token: Almacenar en memoria (no en localStorage)
+   - Refresh Token: Almacenar en HttpOnly cookies
+
+2. **Renovación:**
+   - Implementar renovación automática del access_token
+   - Renovar antes de la expiración para evitar interrupciones
+   - Manejar errores de renovación redirigiendo al login
+
+3. **Seguridad:**
+   - Usar siempre HTTPS
+   - No incluir información sensible en los tokens
+   - Implementar revocación de tokens cuando sea necesario
+
 ## Monitoreo y Solución de Problemas
 
 ### CloudWatch Logs

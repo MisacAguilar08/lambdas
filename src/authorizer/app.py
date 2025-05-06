@@ -20,6 +20,7 @@ def generate_policy(principal_id: str, effect: str, resource: str) -> Dict[str, 
         }
     }
 
+
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Custom Authorizer para API Gateway que valida tokens JWT
@@ -35,6 +36,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Validar el token
         secret = os.environ.get('AUTH_TOKEN_SECRET')
         decoded = jwt.decode(token, secret, algorithms=['HS256'])
+        
+        # Verificar que sea un access_token
+        if decoded.get('type') != 'access':
+            raise Exception('Token tipo inválido - Se requiere access_token')
         
         # Si la validación es exitosa, permitir el acceso
         return generate_policy(
