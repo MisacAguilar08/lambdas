@@ -133,7 +133,8 @@ Resources:
           Properties:
             Path: /token
             Method: post
-            Auth: NONE  # Este endpoint no requiere autorización
+            Auth:
+              Authorizer: NONE  # Este endpoint no requiere autorización
 
 Outputs:
   # API Gateway Outputs
