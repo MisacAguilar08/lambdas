@@ -33,4 +33,4 @@ jobs:
 
       - name: SAM Deploy
         run: |
-          sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+          sam deploy --stack-name lambdas-init --no-confirm-changeset --no-fail-on-empty-changeset
