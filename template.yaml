@@ -65,6 +65,8 @@ Resources:
         Variables:
           AUTH_TOKEN_SECRET: !Ref AuthTokenSecret
       Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: /auth/token/time
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -135,6 +137,17 @@ Resources:
             Method: post
             Auth:
               Authorizer: NONE  # Este endpoint no requiere autorización
+
+  # SSM Parameter
+  MySSMParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: auth/token/time
+      Type: String
+      Value: my-parameter-value
+      Description: My SSM Parameter description
+      Tags:
+        Environment: Production
 
 Outputs:
   # API Gateway Outputs
