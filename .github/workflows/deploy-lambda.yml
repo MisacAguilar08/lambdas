@@ -76,34 +76,36 @@ jobs:
       - name: SAM Deploy
         run: |
           echo "Starting SAM deploy..."
-          # Verificar si el stack existe
-          if ! aws cloudformation describe-stacks --stack-name lambdas-init 2>/dev/null; then
-            echo "Stack no existe, creando nuevo stack..."
-          else
-            echo "Stack existe, actualizando..."
-          fi
-
-          # Ejecutar SAM deploy con debug
+          
+          # Ejecutar SAM deploy
           sam deploy \
             --debug \
             --stack-name lambdas-init \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }} || exit 1
-
-          # Verificar el estado del stack después del despliegue
-          echo "Verificando estado del stack..."
-          aws cloudformation describe-stacks \
-            --stack-name lambdas-init \
-            --query 'Stacks[0].StackStatus' \
-            --output text
-
-          # Obtener las URLs de los endpoints si el despliegue fue exitoso
-          if [ $? -eq 0 ]; then
-            echo "Obteniendo información del stack..."
+            --parameter-overrides AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}
+          
+          # Guardar el código de salida del comando anterior
+          DEPLOY_STATUS=$?
+          
+          if [ $DEPLOY_STATUS -eq 0 ]; then
+            echo "Despliegue exitoso. Obteniendo información del stack..."
+            
+            # Obtener y mostrar el estado del stack
+            STACK_STATUS=$(aws cloudformation describe-stacks \
+              --stack-name lambdas-init \
+              --query 'Stacks[0].StackStatus' \
+              --output text)
+            echo "Estado del stack: $STACK_STATUS"
+            
+            # Mostrar los outputs del stack
+            echo "Outputs del stack:"
             aws cloudformation describe-stacks \
               --stack-name lambdas-init \
               --query 'Stacks[0].Outputs' \
               --output table
+          else
+            echo "Error en el despliegue. Código de salida: $DEPLOY_STATUS"
+            exit $DEPLOY_STATUS
           fi
