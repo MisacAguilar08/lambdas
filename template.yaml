@@ -1,16 +1,24 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  lambdas_init - SAM Template for multiple Lambda functions with Custom Authorizer
+  SAM Template for API Gateway with Lambda functions and Custom JWT Authorizer.
+  Includes token generation, authorization, and protected endpoints.
 
 Parameters:
   AuthTokenSecret:
     Type: String
     NoEcho: true
-    Description: Secret key for JWT token validation
+    Description: Secret key used for JWT token generation and validation
+    MinLength: 30
+    MaxLength: 512
+    AllowedPattern: '[A-Za-z0-9/_+=.@-]*'
+    ConstraintDescription: Must contain only alphanumeric characters and these special characters /_+=.@-
 
 Globals:
   Function:
+    Runtime: python3.11
+    Architectures:
+      - x86_64
     Timeout: 30
     MemorySize: 256
     Tracing: Active
@@ -20,6 +28,7 @@ Globals:
       Variables:
         POWERTOOLS_SERVICE_NAME: lambda_service
         LOG_LEVEL: INFO
+
   Api:
     TracingEnabled: true
     Cors:
@@ -38,27 +47,34 @@ Globals:
             ReauthorizeEvery: 300
 
 Resources:
-  # Lambda Layer for common dependencies
   CommonDependenciesLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: common-dependencies
-      Description: Common dependencies for Lambda functions
+      Description: Common dependencies for all Lambda functions
       ContentUri: layers/
       CompatibleRuntimes:
         - python3.11
       RetentionPolicy: Retain
 
-  # Custom Authorizer Lambda Function
+  TokenTimeParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /auth/token/time
+      Type: String
+      Value: '3600'
+      Description: Token expiration time in seconds
+      Tags:
+        Environment: Production
+        Service: Authentication
+
   CustomAuthorizerFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${AWS::StackName}-custom-authorizer
+      Description: JWT token validator for API authorization
       CodeUri: src/authorizer/
       Handler: app.lambda_handler
-      Runtime: python3.11
-      Architectures:
-        - x86_64
       Layers:
         - !Ref CommonDependenciesLayer
       Environment:
@@ -67,63 +83,25 @@ Resources:
       Policies:
         - SSMParameterReadPolicy:
             ParameterName: /auth/token/time
+        - AWSLambdaBasicExecutionRole
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Action:
                 - 'execute-api:Invoke'
               Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*'
+            - Effect: Allow
+              Action:
+                - 'ssm:GetParameter'
+              Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/auth/token/time'
 
-  # Hello World Lambda Function
-  HelloWorldFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub ${AWS::StackName}-hello-world
-      CodeUri: src/hello_world/
-      Handler: app.lambda_handler
-      Runtime: python3.11
-      Architectures:
-        - x86_64
-      Layers:
-        - !Ref CommonDependenciesLayer
-      Events:
-        ApiEvent:
-          Type: Api
-          Properties:
-            Path: /hello
-            Method: get
-
-  # Process Data Lambda Function
-  ProcessDataFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub ${AWS::StackName}-process-data
-      CodeUri: src/process_data/
-      Handler: app.lambda_handler
-      Runtime: python3.11
-      Architectures:
-        - x86_64
-      MemorySize: 512
-      Timeout: 60
-      Layers:
-        - !Ref CommonDependenciesLayer
-      Events:
-        ApiEvent:
-          Type: Api
-          Properties:
-            Path: /process
-            Method: post
-
-  # Token Generator Function
   TokenGeneratorFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${AWS::StackName}-token-generator
+      Description: Generates JWT tokens for API authentication
       CodeUri: src/token_generator/
       Handler: app.lambda_handler
-      Runtime: python3.11
-      Architectures:
-        - x86_64
       Layers:
         - !Ref CommonDependenciesLayer
       Environment:
@@ -136,43 +114,67 @@ Resources:
             Path: /token
             Method: post
             Auth:
-              Authorizer: NONE  # Este endpoint no requiere autorización
+              Authorizer: NONE
 
-  # SSM Parameter
-  MySSMParameter:
-    Type: AWS::SSM::Parameter
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
     Properties:
-      Name: auth/token/time
-      Type: String
-      Value: my-parameter-value
-      Description: My SSM Parameter description
-      Tags:
-        Environment: Production
+      FunctionName: !Sub ${AWS::StackName}-hello-world
+      Description: Sample protected endpoint that requires authentication
+      CodeUri: src/hello_world/
+      Handler: app.lambda_handler
+      Layers:
+        - !Ref CommonDependenciesLayer
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /hello
+            Method: get
+
+  ProcessDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-process-data
+      Description: Data processing endpoint with higher resource allocation
+      CodeUri: src/process_data/
+      Handler: app.lambda_handler
+      MemorySize: 512
+      Timeout: 60
+      Layers:
+        - !Ref CommonDependenciesLayer
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /process
+            Method: post
 
 Outputs:
-  # API Gateway Outputs
   ApiEndpoint:
-    Description: API Gateway endpoint URL
+    Description: API Gateway endpoint URL for Prod stage
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
 
-  # Layer Outputs
   CommonDependenciesLayerArn:
     Description: ARN of the common dependencies layer
     Value: !Ref CommonDependenciesLayer
+
   CommonDependenciesLayerVersion:
-    Description: Version of the common dependencies layer
+    Description: Latest version of the common dependencies layer
     Value: !Ref CommonDependenciesLayer
 
-  # Function Outputs
   HelloWorldFunctionArn:
-    Description: Hello World Lambda Function ARN
+    Description: ARN of the Hello World Lambda function
     Value: !GetAtt HelloWorldFunction.Arn
+
   ProcessDataFunctionArn:
-    Description: Process Data Lambda Function ARN
+    Description: ARN of the Process Data Lambda function
     Value: !GetAtt ProcessDataFunction.Arn
+
   CustomAuthorizerFunctionArn:
-    Description: Custom Authorizer Lambda Function ARN
+    Description: ARN of the Custom Authorizer Lambda function
     Value: !GetAtt CustomAuthorizerFunction.Arn
+
   TokenGeneratorFunctionArn:
-    Description: Token Generator Lambda Function ARN
+    Description: ARN of the Token Generator Lambda function
     Value: !GetAtt TokenGeneratorFunction.Arn
