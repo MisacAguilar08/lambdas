@@ -8,8 +8,8 @@ Parameters:
   AuthTokenSecret:
     Type: String
     NoEcho: true
-    Description: Secret key used for JWT token generation and validation
-    MinLength: 16
+    Description: Secret key used for JWT token generation and validation (minimum 8 characters)
+    MinLength: 6
     MaxLength: 512
 
 Globals:
