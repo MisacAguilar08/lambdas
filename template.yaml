@@ -103,6 +103,13 @@ Resources:
       Environment:
         Variables:
           AUTH_TOKEN_SECRET: !Ref AuthTokenSecret
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - 'ssm:GetParameter'
+              Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/auth/token/time'
       Events:
         ApiEvent:
           Type: Api

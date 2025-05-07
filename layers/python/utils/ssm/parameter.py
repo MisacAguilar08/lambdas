@@ -1,5 +1,4 @@
 import boto3
-import json
 from typing import Any
 
 def get_parameter(parameter_name: str) -> Any:
