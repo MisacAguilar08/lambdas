@@ -2,7 +2,7 @@
 import os
 import json
 import jwt
-from utils.ssm.parameter import get_parameter
+from layers.python.utils.ssm.parameter import get_parameter
 from datetime import datetime, timedelta
 from typing import Dict, Any
 
