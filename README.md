@@ -1,803 +1,1514 @@
-# AWS Lambda Project with SAM
+# API Serverless con Autenticación JWT
 
-Este proyecto demuestra cómo configurar múltiples funciones Lambda usando AWS SAM (Serverless Application Model) con una capa compartida de dependencias (Lambda Layer) y autenticación mediante Custom Authorizer.
+API serverless en AWS que implementa un sistema de autenticación JWT con generación de tokens y autorización personalizada. La arquitectura utiliza API Gateway para el enrutamiento de peticiones, Lambda Functions para la lógica de negocio, y está definida como infraestructura como código usando AWS SAM.
 
-## Estructura del Proyecto
+## 🌟 Características Principales
+
+### Sistema de Autenticación
+- Autenticación basada en JWT con sistema de refresh tokens
+- Tokens de acceso de corta duración (1 hora)
+- Tokens de refresco de larga duración (7 días)
+- Validación automática de tokens en cada petición
+
+### Seguridad
+- Autorización personalizada para API Gateway
+- Gestión segura de secretos con SSM Parameter Store
+- Políticas IAM mínimas necesarias por función
+- Validación de claims en tokens
+
+### DevOps
+- Pipeline de CI/CD completo con GitHub Actions
+- Despliegue automatizado por ambiente (dev/staging/prod)
+- Validaciones automáticas de infraestructura
+- Rollback automático en caso de fallo
+
+### Observabilidad
+- Trazabilidad completa con AWS X-Ray
+- Logs estructurados con AWS Lambda Powertools
+- Métricas detalladas en CloudWatch
+- Monitoreo de performance y errores
+
+### Infraestructura
+- Arquitectura serverless escalable
+- Soporte completo para CORS
+- Gestión de dependencias con Lambda Layers
+- Configuración flexible por ambiente
+
+## 📋 Estructura del Proyecto
 
 ```
 .
 ├── .github/
 │   └── workflows/
-│       └── deploy-lambda.yml    # Configuración de GitHub Actions
+│       └── deploy-lambda.yml    # Pipeline de CI/CD con GitHub Actions
 ├── layers/
-│   ├── python/                  # Directorio donde se instalan las dependencias de la layer
-│   └── requirements.txt         # Dependencias compartidas para todas las funciones
+│   ├── python/                  # Dependencias compartidas para todas las funciones
+│   │   ├── jwt/                # Librería para manejo de JWT
+│   │   ├── powertools/         # AWS Lambda Powertools
+│   │   └── ...                 # Otras dependencias
+│   └── requirements.txt         # Definición de dependencias Python
 ├── src/
-│   ├── hello_world/            # Primera función Lambda
-│   │   ├── app.py              # Código de la función
-│   │   └── requirements.txt     # Dependencias específicas (si las hay)
-│   ├── process_data/           # Segunda función Lambda
-│   │   ├── app.py              # Código de la función
-│   │   └── requirements.txt     # Dependencias específicas (si las hay)
-│   └── authorizer/             # Custom Authorizer Lambda
-│       ├── app.py              # Código del authorizer
-│       └── requirements.txt     # Dependencias específicas
-├── template.yaml               # Plantilla SAM
-└── Makefile                   # Comandos útiles para el desarrollo
+│   ├── authorizer/             # Función de autorización JWT
+│   │   ├── app.py             # Lógica de validación de tokens
+│   │   └── utils/             # Utilidades de autorización
+│   └── token_generator/        # Generador de tokens JWT
+│       ├── app.py             # Lógica de generación de tokens
+│       └── utils/             # Utilidades de generación
+├── template.yaml              # Definición de infraestructura SAM
+└── README.md                 # Documentación del proyecto
 ```
 
-## Componentes Principales
-
-### 1. Lambda Layer
-
-La Layer se define en `template.yaml`:
-```yaml
-CommonDependenciesLayer:
-  Type: AWS::Serverless::LayerVersion
-  Properties:
-    LayerName: common-dependencies
-    Description: Common dependencies for Lambda functions
-    ContentUri: layers/
-    CompatibleRuntimes:
-      - python3.11
-    RetentionPolicy: Retain
-```
-
-Las dependencias compartidas se especifican en `layers/requirements.txt`:
-- pandas
-- numpy
-- pytz
-- PyJWT
-- pytest
-
-### 2. Funciones Lambda
-
-Cada función Lambda está configurada en `template.yaml` y usa la layer compartida:
-```yaml
-HelloWorldFunction:
-  Type: AWS::Serverless::Function
-  Properties:
-    FunctionName: !Sub ${AWS::StackName}-hello-world
-    CodeUri: src/hello_world/
-    Handler: app.lambda_handler
-    Runtime: python3.11
-    Layers:
-      - !Ref CommonDependenciesLayer
-```
-
-### 3. Sistema de Autenticación y Autorización
-
-El proyecto implementa un sistema de autenticación basado en JWT (JSON Web Tokens) con un Custom Authorizer para proteger los endpoints de la API.
-
-#### Tokens de Autenticación
-
-##### Access Token
-Token JWT de corta duración para autenticar solicitudes a la API.
-
-**Características:**
-- **Duración:** 1 hora
-- **Propósito:** Autenticación de solicitudes a la API
-- **Formato:** JWT (JSON Web Token)
-- **Algoritmo:** HS256
-- **Claims:**
-  ```json
-  {
-    "sub": "user123",           // ID del usuario
-    "iat": 1234567890,         // Timestamp de emisión
-    "exp": 1234571490,         // Timestamp de expiración
-    "iss": "lambda-api",       // Emisor del token
-    "type": "access"           // Tipo de token
-  }
-  ```
-
-##### Refresh Token
-Token JWT de larga duración para renovar access tokens expirados.
-
-**Características:**
-- **Duración:** 7 días
-- **Propósito:** Renovar access tokens expirados
-- **Formato:** JWT (JSON Web Token)
-- **Algoritmo:** HS256
-- **Claims:**
-  ```json
-  {
-    "sub": "user123",           // ID del usuario
-    "iat": 1234567890,         // Timestamp de emisión
-    "exp": 1235172690,         // Timestamp de expiración (7 días)
-    "iss": "lambda-api",       // Emisor del token
-    "type": "refresh"          // Tipo de token
-  }
-  ```
-
-#### Custom Authorizer
-Función Lambda que valida los tokens en las solicitudes API:
-
-```yaml
-Auth:
-  DefaultAuthorizer: CustomAuthorizer
-  Authorizers:
-    CustomAuthorizer:
-      FunctionArn: !GetAtt CustomAuthorizerFunction.Arn
-      FunctionPayloadType: TOKEN
-      Identity:
-        Header: Authorization
-        ValidationExpression: "^Bearer [-0-9a-zA-Z\._]*$"
-        ReauthorizeEvery: 300
-```
-
-**Características:**
-- Validación de tokens JWT
-- Reautorización cada 5 minutos
-- Validación estricta del formato del token
-- Integración con secretos para la firma JWT
-
-#### Endpoints de Autenticación
-
-##### 1. Generar Tokens
-**Endpoint:** `/token`
-**Método:** POST
-
-**Request:**
-```json
-{
-    "grant_type": "password",
-    "user_id": "user123"
-}
-```
-
-**Response:**
-```json
-{
-    "access_token": "eyJhbGciOiJIUzI1NiIs...",
-    "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
-    "expires_in": 3600,
-    "token_type": "Bearer"
-}
-```
-
-##### 2. Renovar Access Token
-**Endpoint:** `/token`
-**Método:** POST
-
-**Request:**
-```json
-{
-    "grant_type": "refresh_token",
-    "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
-
-**Response:**
-```json
-{
-    "access_token": "eyJhbGciOiJIUzI1NiIs...",
-    "expires_in": 3600,
-    "token_type": "Bearer"
-}
-```
-
-#### Manejo de Errores
-
-1. **401 Unauthorized:**
-   ```json
-   {
-       "error": "Refresh token expirado"
-   }
-   ```
-   ```json
-   {
-       "error": "Refresh token inválido"
-   }
-   ```
-
-2. **400 Bad Request:**
-   ```json
-   {
-       "error": "grant_type inválido"
-   }
-   ```
-   ```json
-   {
-       "error": "user_id es requerido"
-   }
-   ```
-
-#### Buenas Prácticas de Seguridad
-
-1. **Almacenamiento:**
-   - Access Token: Almacenar en memoria (no en localStorage)
-   - Refresh Token: Almacenar en HttpOnly cookies
-
-2. **Renovación:**
-   - Implementar renovación automática del access token
-   - Renovar antes de la expiración para evitar interrupciones
-   - Manejar errores de renovación redirigiendo al login
-
-3. **Seguridad:**
-   - Usar siempre HTTPS
-   - No incluir información sensible en los tokens
-   - Implementar revocación de tokens cuando sea necesario
-
-### 4. GitHub Actions Workflow
-
-El workflow (`.github/workflows/deploy-lambda.yml`) automatiza el despliegue y se ejecuta en las siguientes situaciones:
-
-1. **Push a main** (solo archivos relevantes):
-   - Cambios en `/src/**`
-   - Cambios en `/layers/**`
-   - Cambios en `template.yaml`
-
-2. **Pull Requests a main**:
-   - Verifica el build y despliegue
-   - Solo para cambios en código y configuración
-
-3. **Creación de Release**:
-   - Se ejecuta automáticamente al crear un nuevo release
-   - Ideal para despliegues a producción
-
-4. **Manual (workflow_dispatch)**:
-   - Puede ser ejecutado manualmente desde GitHub
-   - Permite seleccionar el ambiente (dev/staging/prod)
-   - Opción para habilitar logs de debug
-
-El workflow realiza las siguientes acciones:
-1. Configura el entorno Python
-2. Instala dependencias del sistema
-3. Instala AWS SAM CLI
-4. Construye la Lambda Layer
-5. Configura credenciales AWS
-6. Construye y despliega la aplicación
-
-Para ejecutar manualmente:
-1. Ir a la pestaña "Actions" en GitHub
-2. Seleccionar "Deploy Lambda"
-3. Click en "Run workflow"
-4. Seleccionar la rama y configurar opciones
-5. Click en "Run workflow"
-
-### 4. Makefile
-
-El Makefile proporciona comandos útiles:
-
-- `make build`: Construye el proyecto usando SAM
-- `make clean`: Limpia archivos generados
-- `make deploy`: Despliega la aplicación
-- `make build-layer`: Construye la Lambda Layer
-- `make install-deps`: Instala dependencias localmente
-
-## Pasos de Implementación
-
-1. **Configuración Inicial**
-   - Crear estructura de directorios
-   - Configurar template.yaml básico
-   - Crear Makefile inicial
-
-2. **Configuración de Layer**
-   - Crear directorio layers
-   - Definir dependencias compartidas
-   - Configurar Layer en template.yaml
-
-3. **Configuración de Funciones**
-   - Crear directorios para cada función
-   - Implementar código de las funciones
-   - Asociar funciones con la Layer
-
-4. **Configuración de CI/CD**
-   - Crear workflow de GitHub Actions
-   - Configurar pasos de build y deploy
-   - Manejar credenciales AWS
-
-## Uso
-
-1. **Configuración Local**
-   ```bash
-   # Instalar dependencias
-   make install-deps
-
-   # Construir Layer
-   make build-layer
-
-   # Construir proyecto
-   make build
-   ```
-
-2. **Despliegue**
-   ```bash
-   # Desplegar a AWS
-   make deploy
-   ```
-
-3. **Desarrollo**
-   - Añadir nuevas dependencias a `layers/requirements.txt`
-   - Implementar código en los directorios de las funciones
-   - Commit y push para despliegue automático
-
-## Requisitos
-
-- Python 3.11
-- AWS CLI configurado
-- AWS SAM CLI
-- Credenciales AWS con permisos adecuados
-
-## Secretos Necesarios en GitHub
-
-Para el despliegue automático, configurar en GitHub:
-- `AWS_ACCESS_KEY_ID`: ID de clave de acceso de AWS
-- `AWS_SECRET_ACCESS_KEY`: Clave secreta de acceso de AWS
-- `AWS_REGION`: Región de AWS donde se desplegará
-- `AUTH_TOKEN_SECRET`: Secreto para firmar y validar tokens JWT
-
-
-
-## Monitoreo y Solución de Problemas
-
-### CloudWatch Logs
-
-Cada función genera logs en formato JSON con la siguiente información:
-- Timestamp
-- Nivel de log (INFO, ERROR, etc.)
-- Nombre del servicio
-- Detalles de la solicitud/respuesta
-- Trazas de error (si aplica)
-
-Para ver los logs:
-1. Ir a CloudWatch en la consola AWS
-2. Navegar a Log Groups
-3. Buscar el grupo correspondiente a la función:
-   - `/aws/lambda/lambdas-init-hello-world`
-   - `/aws/lambda/lambdas-init-process-data`
-   - `/aws/lambda/lambdas-init-custom-authorizer`
-   - `/aws/lambda/lambdas-init-token-generator`
-
-### X-Ray Tracing
-
-El proyecto tiene habilitado X-Ray para todas las funciones:
-- Visualización de latencias
-- Identificación de cuellos de botella
-- Análisis de dependencias entre servicios
-- Mapeo de errores en la cadena de llamadas
-
-### Problemas Comunes
-
-1. **Error: Token inválido**
-   - Verificar que el token no haya expirado
-   - Asegurar que AUTH_TOKEN_SECRET sea el mismo usado para generar el token
-   - Validar el formato del header Authorization
-
-2. **Error: Unable to upload artifact**
-   - Verificar que existe el directorio layers/python
-   - Asegurar que requirements.txt está presente
-   - Confirmar que las dependencias se instalaron correctamente
-
-3. **Error: Deployment failed**
-   - Revisar los logs de CloudFormation
-   - Verificar permisos de IAM
-   - Comprobar límites de servicio AWS
-
-### Métricas Importantes
-
-CloudWatch recopila automáticamente:
-- Invocaciones por función
-- Errores y timeouts
-- Duración de ejecución
-- Memoria utilizada
-- Concurrencia
-
-## Mejores Prácticas
-
-### Desarrollo
-- Usar entornos virtuales para desarrollo local
-- Mantener requirements.txt actualizado
-- Seguir principios de IaC (Infrastructure as Code)
-- Implementar pruebas unitarias
-
-### Seguridad
-- Rotar regularmente AUTH_TOKEN_SECRET
-- Mantener las dependencias actualizadas
-- Usar el principio de mínimo privilegio en IAM
-- Implementar rate limiting en API Gateway
-
-### Operaciones
-- Monitorear costos regularmente
-- Configurar alarmas para errores y latencia
-- Mantener documentación actualizada
-- Realizar backups de configuración
-
-## Endpoints API
-
-1. Token Generator Function
-   - Path: `/token`
-   - Método: POST
-   - Autenticación: No requiere
-   - Cuerpo de la solicitud:
-     ```json
-     {
-         "user_id": "tu-id-de-usuario"
-     }
-     ```
-   - Respuesta:
-     ```json
-     {
-         "token": "eyJhbGciOiJIUzI1NiIs...",
-         "expires_in": 86400,
-         "token_type": "Bearer"
-     }
-     ```
-
-2. Hello World Function
-   - Path: `/hello`
-   - Método: GET
-   - Autenticación: Requiere token JWT válido
-   - Retorna: Mensaje de saludo y timestamp
-   - Ejemplo de uso:
-     ```bash
-     curl https://tu-api.execute-api.region.amazonaws.com/Prod/hello \
-       -H "Authorization: Bearer tu-token-aquí"
-     ```
-
-3. Process Data Function
-   - Path: `/process`
-   - Método: POST
-   - Autenticación: Requiere token JWT válido
-   - Retorna: Estadísticas de datos procesados
-   - Ejemplo de uso:
-     ```bash
-     curl -X POST https://tu-api.execute-api.region.amazonaws.com/Prod/process \
-       -H "Authorization: Bearer tu-token-aquí" \
-       -H "Content-Type: application/json" \
-       -d '{"data": "ejemplo"}'
-     ```
-
-### Autenticación de Endpoints
-
-Todos los endpoints (excepto `/token`) requieren autenticación mediante token JWT:
-
-1. **Obtención del Token**:
-   ```bash
-   curl -X POST https://tu-api.execute-api.region.amazonaws.com/Prod/token \
-     -H "Content-Type: application/json" \
-     -d '{"user_id": "123"}'
-   ```
-
-2. **Header Requerido**:
-   ```
-   Authorization: Bearer <token>
-   ```
-
-3. **Formato del Token**:
-   - Debe ser un JWT válido
-   - Firmado con el secreto configurado en AUTH_TOKEN_SECRET
-   - Debe incluir claims estándar:
-     - `sub`: ID del usuario
-     - `exp`: Tiempo de expiración (24 horas desde la emisión)
-     - `iat`: Tiempo de emisión
-     - `iss`: Emisor del token (lambda-api)
-
-4. **Manejo de Errores**:
-   - Token expirado: HTTP 401
-   - Token inválido: HTTP 401
-   - Token mal formado: HTTP 400
-   - Token faltante: HTTP 401
-
-5. **Seguridad**:
-   - Los tokens expiran después de 24 horas
-   - El authorizer revalida los tokens cada 5 minutos
-   - Se utiliza HTTPS para todas las comunicaciones
-   - Los tokens son firmados con HS256
-
-3. **Ejemplo de Uso**:
-   ```bash
-   # Petición GET
-   curl -X GET https://your-api.execute-api.region.amazonaws.com/Prod/hello \
-     -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
-     -H "Content-Type: application/json"
-
-   # Petición POST
-   curl -X POST https://your-api.execute-api.region.amazonaws.com/Prod/process \
-     -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
-     -H "Content-Type: application/json" \
-     -d '{"data": "example"}'
-   ```
-
-### Headers CORS Permitidos
-
-Los endpoints permiten los siguientes headers CORS:
-- Content-Type
-- X-Amz-Date
-- Authorization
-- X-Api-Key
-- X-Amz-Security-Token
-
-### Ejemplo de Uso
-
+### Descripción de Componentes
+
+#### 1. Workflow CI/CD (.github/workflows/deploy-lambda.yml)
+- Pipeline automatizado de integración y despliegue
+- Validaciones de código y estructura
+- Construcción de layers y funciones
+- Despliegue por ambiente
+
+#### 2. Lambda Layer (layers/)
+- Capa compartida de dependencias
+- Optimización de tamaño de funciones
+- Reutilización de código común
+- Gestión centralizada de versiones
+
+#### 3. Funciones Lambda (src/)
+- Código fuente de las funciones
+- Separación clara de responsabilidades
+- Utilidades compartidas
+- Tests unitarios y de integración
+
+#### 4. Infraestructura (template.yaml)
+- Definición de recursos AWS
+- Configuración de API Gateway
+- Políticas IAM y permisos
+- Variables de ambiente y parámetros
+
+## 🔧 Configuración
+
+### Pre-requisitos Detallados
+
+1. AWS CLI
 ```bash
-# Ejemplo de petición con token
-curl -X GET https://your-api.execute-api.region.amazonaws.com/Prod/hello \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+# Instalar AWS CLI
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
 
-# Ejemplo de petición POST
-curl -X POST https://your-api.execute-api.region.amazonaws.com/Prod/process \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
-  -H "Content-Type: application/json" \
-  -d '{"data": "example"}'
+# Configurar credenciales
+aws configure
 ```
 
-## Mantenimiento
+2. AWS SAM CLI
+```bash
+# Instalar SAM CLI
+pip install aws-sam-cli
 
-1. **Actualizar Dependencias**
-   - Modificar `layers/requirements.txt`
-   - Ejecutar `make build-layer`
-   - Desplegar cambios
+# Verificar instalación
+sam --version
+```
 
-2. **Añadir Nueva Función**
-   - Crear nuevo directorio en `src/`
-   - Añadir configuración en `template.yaml`
-   - Actualizar documentación
+3. Python 3.11
+```bash
+# Instalar Python 3.11
+sudo apt update
+sudo apt install python3.11 python3.11-venv
 
-3. **Depuración**
-   - Revisar logs en CloudWatch
-   - Usar `sam local` para pruebas locales
-   - Verificar configuración de Layer
+# Crear entorno virtual
+python3.11 -m venv .venv
+source .venv/bin/activate
+```
 
-## Guía Detallada para Configuración de Lambda Layers
+4. Git
+```bash
+# Instalar Git
+sudo apt-get install git
 
-### 1. Estructura de Archivos para Layer
+# Configurar Git
+git config --global user.name "Tu Nombre"
+git config --global user.email "tu@email.com"
+```
+
+### Variables de Entorno
+
+#### Secretos de GitHub
+Configurar en: Settings > Secrets > Actions
+
+1. AWS_ACCESS_KEY_ID
+- Descripción: Access Key para AWS
+- Requerido: Sí
+- Formato: String (20 caracteres)
+
+2. AWS_SECRET_ACCESS_KEY
+- Descripción: Secret Key para AWS
+- Requerido: Sí
+- Formato: String (40 caracteres)
+
+3. AWS_REGION
+- Descripción: Región de AWS
+- Requerido: Sí
+- Ejemplo: us-east-1
+
+4. AUTH_TOKEN_SECRET
+- Descripción: Secreto para firmar JWT
+- Requerido: Sí
+- Mínimo: 6 caracteres
+- Recomendado: 32+ caracteres aleatorios
+
+### Parámetros SSM
+
+#### Parámetros del Sistema
+
+1. /auth/token/time
+```yaml
+Type: String
+Value: '3600'
+Description: Tiempo de expiración del token en segundos
+Tier: Standard
+DataType: text
+```
+
+#### Acceso en Código
+```python
+from utils.ssm.parameter import get_parameter
+
+# Obtener tiempo de expiración
+token_time = int(get_parameter('/auth/token/time'))
+
+# Usar en generación de token
+expiration = datetime.utcnow() + timedelta(seconds=token_time)
+```
+
+## 🚀 Despliegue
+
+### GitHub Actions Workflow
+
+#### Triggers
+1. Push a main
+```yaml
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'layers/**'
+      - 'template.yaml'
+```
+
+2. Pull Request
+```yaml
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'layers/**'
+      - 'template.yaml'
+```
+
+3. Release
+```yaml
+on:
+  release:
+    types: [created]
+```
+
+4. Manual
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+```
+
+#### Proceso de Despliegue
+
+1. Verificación de Estructura
+```yaml
+- name: Verify Project Structure
+  run: |
+    echo "Verificando estructura del proyecto..."
+    if [ ! -d "layers" ]; then
+      echo "Error: Directorio 'layers' no encontrado"
+      exit 1
+    fi
+```
+
+2. Construcción de Layer
+```yaml
+- name: Build Lambda Layer
+  run: |
+    pip install -r layers/requirements.txt -t layers/python/
+```
+
+3. Despliegue SAM
+```yaml
+- name: SAM Deploy
+  run: |
+    sam deploy \
+      --template-file .aws-sam/build/template.yaml \
+      --stack-name lambdas-init \
+      --capabilities CAPABILITY_IAM \
+      --parameter-overrides "AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}"
+```
+
+### Despliegue Local
+
+1. Construcción
+```bash
+# Construir proyecto
+sam build --use-container
+
+# Verificar build
+ls -la .aws-sam/build/
+```
+
+2. Despliegue
+```bash
+# Despliegue interactivo
+sam deploy --guided
+
+# Parámetros sugeridos
+Stack Name: lambdas-init
+Region: us-east-1
+Parameter AuthTokenSecret: tu-secreto-jwt
+Confirm changes before deploy: Yes
+Allow SAM CLI IAM role creation: Yes
+Save arguments to samconfig.toml: Yes
+```
+
+## 🔑 Sistema de Autenticación
+
+### Flujo de Autenticación
+
+1. Generación de Tokens
+```mermaid
+sequenceDiagram
+    Cliente->>API: POST /token (user_id)
+    API->>TokenGenerator: Genera tokens
+    TokenGenerator->>SSM: Obtiene tiempo expiración
+    TokenGenerator->>API: Tokens JWT
+    API->>Cliente: Access + Refresh tokens
+```
+
+2. Uso de Endpoints
+```mermaid
+sequenceDiagram
+    Cliente->>API: GET /recurso
+    API->>Authorizer: Valida token
+    Authorizer->>API: Allow/Deny
+    API->>Lambda: Ejecuta función
+    Lambda->>Cliente: Respuesta
+```
+
+3. Refresh de Token
+```mermaid
+sequenceDiagram
+    Cliente->>API: POST /token (refresh_token)
+    API->>TokenGenerator: Valida refresh token
+    TokenGenerator->>API: Nuevo access_token
+    API->>Cliente: Access token
+```
+
+### Endpoints de Autenticación
+
+#### 1. Generación de Tokens
+```bash
+# Solicitud
+curl -X POST https://tu-api.execute-api.region.amazonaws.com/Prod/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grant_type": "password",
+    "user_id": "123"
+  }'
+
+# Respuesta Exitosa
+{
+    "access_token": "eyJ0...",
+    "refresh_token": "eyJ1...",
+    "expires_in": 3600,
+    "token_type": "Bearer"
+}
+
+# Respuesta Error
+{
+    "error": "invalid_request",
+    "error_description": "user_id es requerido"
+}
+```
+
+#### 2. Refresh de Token
+```bash
+# Solicitud
+curl -X POST https://tu-api.execute-api.region.amazonaws.com/Prod/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grant_type": "refresh_token",
+    "refresh_token": "eyJ1..."
+  }'
+
+# Respuesta Exitosa
+{
+    "access_token": "eyJ0...",
+    "expires_in": 3600,
+    "token_type": "Bearer"
+}
+
+# Respuesta Error
+{
+    "error": "invalid_grant",
+    "error_description": "Refresh token expirado"
+}
+```
+
+### Estructura de Tokens
+
+#### Access Token
+```json
+{
+  "sub": "123",
+  "iat": 1634567890,
+  "exp": 1634571490,
+  "iss": "lambda-api",
+  "type": "access"
+}
+```
+
+#### Refresh Token
+```json
+{
+  "sub": "123",
+  "iat": 1634567890,
+  "exp": 1635172690,
+  "iss": "lambda-api",
+  "type": "refresh"
+}
+```
+
+### Configuración de CORS
+
+#### API Gateway
+```yaml
+Cors:
+  AllowMethods: "'GET,POST,OPTIONS'"
+  AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+  AllowOrigin: "'*'"
+```
+
+#### Respuestas Lambda
+```python
+{
+    "statusCode": 200,
+    "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS"
+    },
+    "body": "..."
+}
+```
+
+## 📚 Lambda Layers
+
+### Estructura de Layers
 ```
 layers/
-├── python/          # Directorio donde se instalarán las dependencias
-└── requirements.txt # Lista de dependencias compartidas
+├── python/                    # Directorio para dependencias Python
+│   ├── utils/                # Utilidades compartidas
+│   │   ├── __init__.py
+│   │   └── ssm/             # Utilidades para SSM
+│   │       ├── __init__.py
+│   │       └── parameter.py  # Funciones para manejo de parámetros
+│   └── ... (otras dependencias)
+└── requirements.txt          # Dependencias a instalar
 ```
 
-### 2. Modificaciones en template.yaml
+### Configuración de Requirements
 
+#### requirements.txt
+```txt
+# AWS SDK y utilidades
+boto3==1.28.44
+aws-lambda-powertools==2.26.0
+
+# Autenticación y seguridad
+pyjwt==2.8.0
+cryptography==41.0.4
+
+# Otros utilitarios
+python-dateutil==2.8.2
+requests==2.31.0
+```
+
+### Utilidades Compartidas
+
+#### parameter.py
+```python
+import boto3
+from aws_lambda_powertools import Logger
+
+logger = Logger()
+ssm = boto3.client('ssm')
+
+def get_parameter(name: str) -> str:
+    """
+    Obtiene un parámetro de SSM Parameter Store
+    
+    Args:
+        name (str): Nombre del parámetro
+        
+    Returns:
+        str: Valor del parámetro
+    """
+    try:
+        response = ssm.get_parameter(Name=name)
+        return response['Parameter']['Value']
+    except Exception as e:
+        logger.error(f"Error obteniendo parámetro {name}: {str(e)}")
+        raise
+```
+
+### Configuración en SAM
+
+#### template.yaml
 ```yaml
-# 1. Definir el recurso Layer
 Resources:
   CommonDependenciesLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
-      LayerName: common-dependencies
-      Description: Common dependencies for Lambda functions
+      LayerName: !Sub ${AWS::StackName}-dependencies
+      Description: Common dependencies for all Lambda functions
       ContentUri: layers/
       CompatibleRuntimes:
         - python3.11
-      RetentionPolicy: Retain
-
-  # 2. Añadir la Layer a las funciones Lambda
-  MyFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      # ... otras propiedades ...
-      Layers:
-        - !Ref CommonDependenciesLayer
-
-# 3. Opcional: Añadir Outputs para la Layer
-Outputs:
-  CommonDependenciesLayerArn:
-    Description: ARN of the common dependencies layer
-    Value: !Ref CommonDependenciesLayer
-  CommonDependenciesLayerVersion:
-    Description: Version of the common dependencies layer
-    Value: !Ref CommonDependenciesLayer
+      RetentionPolicy: Delete
 ```
 
-### 3. Modificaciones en deploy-lambda.yml
+### Construcción del Layer
 
+#### Local
+```bash
+# Crear directorio para dependencias
+mkdir -p layers/python
+
+# Instalar dependencias
+pip install -r layers/requirements.txt -t layers/python/
+
+# Verificar estructura
+tree layers/
+```
+
+#### GitHub Actions
+```yaml
+- name: Build Lambda Layer
+  run: |
+    echo "Building Lambda Layer..."
+    pip install -r layers/requirements.txt -t layers/python/
+    if [ -f "Makefile" ]; then
+      make build-layer
+    fi
+```
+
+### Uso en Funciones Lambda
+
+#### 1. Asignar Layer a Función
+```yaml
+  MiFuncion:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      Layers:
+        - !Ref CommonDependenciesLayer
+```
+
+#### 2. Importar Utilidades
+```python
+# Importar utilidad SSM
+from utils.ssm.parameter import get_parameter
+
+# Usar en código
+token_time = get_parameter('/auth/token/time')
+```
+
+### Mejores Prácticas
+
+1. Organización de Dependencias
+```
+layers/
+├── python/
+│   ├── utils/           # Código propio
+│   ├── shared/          # Lógica de negocio compartida
+│   └── vendor/          # Dependencias terceros
+└── requirements.txt
+```
+
+2. Versionamiento
+```yaml
+  CommonDependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub ${AWS::StackName}-dependencies-${Environment}
+      Description: !Sub Common dependencies v${Version} for ${Environment}
+```
+
+3. Optimización de Tamaño
+```bash
+# Eliminar archivos innecesarios
+find layers/python/ -type d -name "__pycache__" -exec rm -rf {} +
+find layers/python/ -type d -name "*.dist-info" -exec rm -rf {} +
+find layers/python/ -type d -name "*.egg-info" -exec rm -rf {} +
+
+# Comprimir archivos .py
+python -m compileall layers/python/
+find layers/python/ -name "*.py" -delete
+```
+
+4. Separación por Dominio
+```yaml
+  AuthenticationLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub ${AWS::StackName}-auth
+      ContentUri: layers/auth/
+
+  DatabaseLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub ${AWS::StackName}-db
+      ContentUri: layers/database/
+```
+
+### Solución de Problemas
+
+1. Layer Demasiado Grande
+```bash
+# Verificar tamaño
+du -sh layers/python/*
+
+# Analizar dependencias
+pip list --format=freeze > requirements-full.txt
+```
+
+2. Conflictos de Dependencias
+```python
+import pkg_resources
+
+def check_dependencies():
+    """Verificar conflictos de dependencias"""
+    try:
+        pkg_resources.working_set.resolve()
+        logger.info("No hay conflictos de dependencias")
+    except pkg_resources.VersionConflict as e:
+        logger.error(f"Conflicto de dependencias: {str(e)}")
+```
+
+3. Problemas de Importación
+```python
+import sys
+import os
+
+def debug_imports():
+    """Debuggear paths de importación"""
+    logger.info({
+        "python_path": sys.path,
+        "working_dir": os.getcwd(),
+        "layer_contents": os.listdir("/opt/python")
+    })
+```
+
+### Ejemplos de Uso
+
+1. Utilidades de Fecha
+```python
+# En layers/python/utils/date_utils.py
+from datetime import datetime, timezone
+
+def utc_now():
+    """Retorna datetime UTC actual"""
+    return datetime.now(timezone.utc)
+
+def format_iso8601(dt):
+    """Formatea datetime a ISO8601"""
+    return dt.isoformat()
+```
+
+2. Helpers de Respuesta
+```python
+# En layers/python/utils/response.py
+def api_response(status_code, body, headers=None):
+    """Genera respuesta API Gateway estandarizada"""
+    response = {
+        "statusCode": status_code,
+        "body": body,
+        "headers": {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+        }
+    }
+    if headers:
+        response["headers"].update(headers)
+    return response
+```
+
+3. Validadores
+```python
+# En layers/python/utils/validators.py
+from typing import Dict, Any
+
+def validate_token_request(body: Dict[str, Any]) -> tuple[bool, str]:
+    """Valida request de generación de token"""
+    if not isinstance(body, dict):
+        return False, "Body debe ser un objeto JSON"
+        
+    if "grant_type" not in body:
+        return False, "grant_type es requerido"
+        
+    if body["grant_type"] not in ["password", "refresh_token"]:
+        return False, "grant_type inválido"
+        
+    return True, ""
+```
+
+## 🔐 AWS Systems Manager (SSM) Parameter Store
+
+### Estructura de Parámetros
+
+```
+/
+├── app/                      # Namespace principal
+│   ├── dev/                 # Ambiente desarrollo
+│   │   ├── database/       # Parámetros de base de datos
+│   │   └── auth/          # Parámetros de autenticación
+│   ├── staging/            # Ambiente staging
+│   └── prod/              # Ambiente producción
+└── shared/                 # Parámetros compartidos
+```
+
+### Tipos de Parámetros
+
+1. String
+```yaml
+  DatabaseHost:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/${Environment}/database/host
+      Type: String
+      Value: localhost
+      Description: Host de la base de datos
+```
+
+2. SecureString
+```yaml
+  DatabasePassword:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/${Environment}/database/password
+      Type: SecureString
+      Value: !Ref DBPasswordSecret
+      Description: Contraseña de la base de datos
+```
+
+3. StringList
+```yaml
+  AllowedOrigins:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/${Environment}/cors/allowed-origins
+      Type: StringList
+      Value: "https://dev.example.com,https://staging.example.com"
+      Description: Orígenes permitidos para CORS
+```
+
+### Configuración en SAM
+
+#### 1. Definición de Parámetros
+
+```yaml
+# template.yaml
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+Resources:
+  # Parámetros de Autenticación
+  AuthTokenTime:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /app/${Environment}/auth/token/time
+      Type: String
+      Value: '3600'
+      Description: Tiempo de expiración del token en segundos
+      Tier: Standard
+      DataType: text
+      Tags:
+        Environment: !Ref Environment
+        Service: Authentication
+
+  AuthTokenSecret:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /app/${Environment}/auth/token/secret
+      Type: SecureString
+      Value: !Ref AuthSecretValue
+      Description: Secreto para firmar tokens JWT
+      Tier: Standard
+      Tags:
+        Environment: !Ref Environment
+        Service: Authentication
+
+  # Parámetros de API
+  ApiConfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /app/${Environment}/api/config
+      Type: String
+      Value: !Sub |
+        {
+          "rateLimit": 1000,
+          "timeout": 30,
+          "maxRetries": 3
+        }
+      Description: Configuración general de la API
+```
+
+#### 2. Permisos IAM
+
+```yaml
+# Política para lectura de parámetros
+  ParameterReadPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'ssm:GetParameter'
+              - 'ssm:GetParameters'
+              - 'ssm:GetParametersByPath'
+            Resource:
+              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/app/${Environment}/*'
+
+# Política para escritura de parámetros
+  ParameterWritePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'ssm:PutParameter'
+              - 'ssm:DeleteParameter'
+              - 'ssm:DeleteParameters'
+            Resource:
+              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/app/${Environment}/*'
+```
+
+### Utilidades para SSM
+
+#### 1. Cliente SSM Mejorado
+
+```python
+# layers/python/utils/ssm/client.py
+import boto3
+import json
+from typing import Any, Dict, List, Optional
+from aws_lambda_powertools import Logger
+from botocore.exceptions import ClientError
+
+logger = Logger()
+ssm = boto3.client('ssm')
+
+class SSMClient:
+    @staticmethod
+    def get_parameter(name: str, decrypt: bool = False) -> str:
+        """
+        Obtiene un parámetro simple
+        """
+        try:
+            response = ssm.get_parameter(
+                Name=name,
+                WithDecryption=decrypt
+            )
+            return response['Parameter']['Value']
+        except ClientError as e:
+            logger.error(f"Error getting parameter {name}: {str(e)}")
+            raise
+
+    @staticmethod
+    def get_parameters(names: List[str], decrypt: bool = False) -> Dict[str, str]:
+        """
+        Obtiene múltiples parámetros
+        """
+        try:
+            response = ssm.get_parameters(
+                Names=names,
+                WithDecryption=decrypt
+            )
+            return {
+                param['Name']: param['Value'] 
+                for param in response['Parameters']
+            }
+        except ClientError as e:
+            logger.error(f"Error getting parameters {names}: {str(e)}")
+            raise
+
+    @staticmethod
+    def get_parameters_by_path(
+        path: str,
+        decrypt: bool = False,
+        recursive: bool = True
+    ) -> Dict[str, str]:
+        """
+        Obtiene parámetros por path
+        """
+        try:
+            parameters = {}
+            paginator = ssm.get_paginator('get_parameters_by_path')
+            
+            for page in paginator.paginate(
+                Path=path,
+                WithDecryption=decrypt,
+                Recursive=recursive
+            ):
+                for param in page['Parameters']:
+                    parameters[param['Name']] = param['Value']
+                    
+            return parameters
+        except ClientError as e:
+            logger.error(f"Error getting parameters by path {path}: {str(e)}")
+            raise
+
+    @staticmethod
+    def get_json_parameter(name: str, decrypt: bool = False) -> Dict[str, Any]:
+        """
+        Obtiene y parsea un parámetro JSON
+        """
+        try:
+            value = SSMClient.get_parameter(name, decrypt)
+            return json.loads(value)
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing JSON parameter {name}: {str(e)}")
+            raise
+```
+
+#### 2. Decorador para Cache
+
+```python
+# layers/python/utils/ssm/cache.py
+from functools import wraps
+from typing import Any, Dict
+import time
+
+class SSMCache:
+    _cache: Dict[str, Any] = {}
+    _timestamps: Dict[str, float] = {}
+    _ttl: int = 300  # 5 minutos por defecto
+
+    @classmethod
+    def cached_parameter(cls, ttl: int = 300):
+        def decorator(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                # Crear key única para el cache
+                cache_key = f"{func.__name__}:{args}:{kwargs}"
+                
+                # Verificar si existe en cache y no ha expirado
+                now = time.time()
+                if (
+                    cache_key in cls._cache and
+                    now - cls._timestamps[cache_key] < ttl
+                ):
+                    return cls._cache[cache_key]
+                
+                # Obtener nuevo valor
+                value = func(*args, **kwargs)
+                
+                # Actualizar cache
+                cls._cache[cache_key] = value
+                cls._timestamps[cache_key] = now
+                
+                return value
+            return wrapper
+        return decorator
+```
+
+### Uso en Funciones Lambda
+
+#### 1. Configuración Básica
+
+```python
+# src/mi_funcion/app.py
+from utils.ssm.client import SSMClient
+
+def get_config():
+    # Obtener parámetro simple
+    token_time = SSMClient.get_parameter('/app/dev/auth/token/time')
+    
+    # Obtener parámetro seguro
+    secret = SSMClient.get_parameter('/app/dev/auth/token/secret', decrypt=True)
+    
+    # Obtener parámetro JSON
+    api_config = SSMClient.get_json_parameter('/app/dev/api/config')
+    
+    return {
+        'token_time': int(token_time),
+        'secret': secret,
+        'api_config': api_config
+    }
+```
+
+#### 2. Uso con Cache
+
+```python
+# src/mi_funcion/app.py
+from utils.ssm.client import SSMClient
+from utils.ssm.cache import SSMCache
+
+@SSMCache.cached_parameter(ttl=300)
+def get_cached_config():
+    return SSMClient.get_parameters_by_path('/app/dev/')
+
+def lambda_handler(event, context):
+    # La configuración se cacheará por 5 minutos
+    config = get_cached_config()
+    return {
+        'statusCode': 200,
+        'body': config
+    }
+```
+
+#### 3. Manejo de Múltiples Ambientes
+
+```python
+# src/mi_funcion/app.py
+import os
+from utils.ssm.client import SSMClient
+
+def get_environment_config():
+    env = os.environ.get('ENVIRONMENT', 'dev')
+    base_path = f'/app/{env}/'
+    
+    # Obtener todos los parámetros del ambiente
+    params = SSMClient.get_parameters_by_path(
+        path=base_path,
+        decrypt=True,
+        recursive=True
+    )
+    
+    # Organizar por categoría
+    config = {
+        'auth': {},
+        'api': {},
+        'database': {}
+    }
+    
+    for key, value in params.items():
+        if 'auth' in key:
+            config['auth'][key.split('/')[-1]] = value
+        elif 'api' in key:
+            config['api'][key.split('/')[-1]] = value
+        elif 'database' in key:
+            config['database'][key.split('/')[-1]] = value
+            
+    return config
+```
+
+### Mejores Prácticas
+
+1. Estructura de Nombres
+```
+/app/<environment>/<service>/<parameter>
+/app/dev/auth/token/time
+/app/prod/database/connection-string
+```
+
+2. Versionamiento
+```
+/app/<environment>/<service>/<version>/<parameter>
+/app/prod/api/v1/timeout
+/app/prod/api/v2/timeout
+```
+
+3. Tags para Organización
+```yaml
+Tags:
+  Environment: !Ref Environment
+  Service: Authentication
+  Version: v1
+  Owner: TeamAuth
+```
+
+4. Rotación de Secretos
+```python
+def rotate_secret():
+    # Generar nuevo secreto
+    new_secret = generate_secure_secret()
+    
+    # Actualizar en SSM
+    ssm.put_parameter(
+        Name='/app/prod/auth/token/secret',
+        Value=new_secret,
+        Type='SecureString',
+        Overwrite=True
+    )
+    
+    # Período de gracia para propagación
+    time.sleep(60)
+    
+    return new_secret
+```
+
+### Solución de Problemas
+
+1. Errores de Permisos
+```python
+def check_ssm_permission
+
+### 1. Estructura de Archivos
+```
+src/
+└── nueva_funcion/
+    ├── app.py           # Handler principal
+    ├── utils/           # Utilidades específicas
+    │   └── helpers.py
+    └── tests/           # Tests unitarios
+        └── test_app.py
+```
+
+### 2. Código Lambda
+
+#### app.py
+```python
+from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from utils.helpers import process_data
+
+logger = Logger()
+tracer = Tracer()
+app = APIGatewayRestResolver()
+
+@app.get("/nueva-ruta")
+@tracer.capture_method
+def get_data():
+    try:
+        result = process_data()
+        return {
+            "statusCode": 200,
+            "body": result
+        }
+    except Exception as e:
+        logger.error(f"Error: {str(e)}")
+        return {
+            "statusCode": 500,
+            "body": {"error": "Internal server error"}
+        }
+
+@logger.inject_lambda_context
+@tracer.capture_lambda_handler
+def lambda_handler(event, context):
+    return app.resolve(event, context)
+```
+
+### 3. Configuración SAM
+
+#### template.yaml
+```yaml
+  NuevaFuncion:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-nueva-funcion
+      Description: Nueva función con ejemplo completo
+      CodeUri: src/nueva_funcion/
+      Handler: app.lambda_handler
+      Layers:
+        - !Ref CommonDependenciesLayer
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: nueva_funcion
+          LOG_LEVEL: INFO
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - 'ssm:GetParameter'
+              Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*'
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /nueva-ruta
+            Method: get
+            Auth:
+              Authorizer: CustomAuthorizer
+```
+
+### 4. Tests Unitarios
+
+#### test_app.py
+```python
+import pytest
+from app import app
+
+def test_get_data():
+    # Arrange
+    event = {
+        "httpMethod": "GET",
+        "path": "/nueva-ruta"
+    }
+    
+    # Act
+    response = app.resolve(event, {})
+    
+    # Assert
+    assert response["statusCode"] == 200
+```
+
+## 🔐 Gestión de Parámetros y Secretos
+
+### Parámetros SSM
+
+#### 1. Definición en Template
+```yaml
+  NuevoParametro:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/config/parametro
+      Type: String
+      Value: valor_default
+      Description: Descripción detallada
+      Tier: Standard
+      DataType: text
+      Tags:
+        Environment: !Ref Environment
+```
+
+#### 2. Permisos IAM
+```yaml
+Policies:
+  - Statement:
+      - Effect: Allow
+        Action:
+          - 'ssm:GetParameter'
+          - 'ssm:GetParameters'
+        Resource: 
+          - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/app/config/*'
+```
+
+#### 3. Uso en Código
+```python
+from utils.ssm.parameter import get_parameter
+from aws_lambda_powertools import Logger
+
+logger = Logger()
+
+def get_config():
+    try:
+        # Obtener múltiples parámetros
+        config = {
+            'param1': get_parameter('/app/config/param1'),
+            'param2': get_parameter('/app/config/param2')
+        }
+        return config
+    except Exception as e:
+        logger.error(f"Error obteniendo configuración: {str(e)}")
+        raise
+```
+
+### Secretos en GitHub Actions
+
+#### 1. Configuración Manual
+- Settings > Secrets > Actions > New repository secret
+- Nombre: AUTH_TOKEN_SECRET
+- Valor: [Secreto seguro]
+
+#### 2. Uso en Workflow
 ```yaml
 jobs:
   deploy:
+    environment: ${{ inputs.environment }}
+    env:
+      STACK_NAME: lambdas-${{ inputs.environment }}
     steps:
-      # ... pasos anteriores ...
-
-      # 1. Añadir paso para construir la Layer
-      - name: Build Lambda Layer
+      - name: Deploy Stack
         run: |
-          make build-layer
-
-      # 2. Asegurarse que este paso esté después de construir la Layer
-      - name: SAM Build
-        run: sam build --use-container
-
-      # 3. Asegurarse que el deploy incluya los permisos necesarios
-      - name: SAM Deploy
-        run: |
-          sam deploy --stack-name lambdas-init \
-            --no-confirm-changeset \
-            --no-fail-on-empty-changeset \
-            --capabilities CAPABILITY_IAM
+          sam deploy \
+            --stack-name $STACK_NAME \
+            --parameter-overrides \
+              Environment=${{ inputs.environment }} \
+              AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}
 ```
 
-### 4. Modificaciones en Makefile
-
-```makefile
-# 1. Añadir comando para construir la Layer
-build-layer:
-	mkdir -p layers/python
-	python -m pip install -r layers/requirements.txt -t layers/python/
-
-# 2. Modificar el clean para incluir la Layer
-clean:
-	rm -rf .aws-sam/
-	rm -rf layers/python/*
-
-# 3. Asegurarse que build use contenedores
-build:
-	sam build --use-container
-```
-
-### 5. Pasos de Implementación
-
-1. **Crear estructura de Layer**:
-   ```bash
-   mkdir -p layers/python
-   ```
-
-2. **Crear requirements.txt para Layer**:
-   ```bash
-   # layers/requirements.txt
-   pandas==1.5.3
-   numpy==1.24.3
-   pytz==2023.3
-   ```
-
-3. **Limpiar requirements.txt de las funciones individuales**:
-   - Mover dependencias compartidas al requirements.txt de la Layer
-   - Dejar solo dependencias específicas en cada función
-
-4. **Construir Layer localmente**:
-   ```bash
-   make build-layer
-   ```
-
-5. **Verificar estructura**:
-   ```
-   layers/
-   ├── python/
-   │   ├── numpy/
-   │   ├── pandas/
-   │   └── pytz/
-   └── requirements.txt
-   ```
-
-### 6. Consideraciones Importantes
-
-1. **Tamaño de Layer**:
-   - Límite de 250 MB descomprimido
-   - Monitorear tamaño de dependencias
-
-2. **Versionamiento**:
-   - Las Layers son versionadas automáticamente
-   - Cada despliegue crea una nueva versión
-   - Mantener el RetentionPolicy en Retain
-
-3. **Permisos**:
-   - Asegurar que el rol IAM tenga permisos para:
-     - Crear y actualizar Layers
-     - Asociar Layers a funciones
-     - Eliminar versiones antiguas
-
-4. **Optimización**:
-   - Incluir solo dependencias necesarias
-   - Considerar separar en múltiples Layers si es necesario
-   - Limpiar versiones antiguas periódicamente
-
-5. **Debugging**:
-   - Verificar la estructura de directorios de la Layer
-   - Comprobar que las dependencias se instalan correctamente
-   - Revisar logs de CloudWatch para errores de importación
-
-## Uso del Makefile
-
-El Makefile se utiliza en dos contextos principales:
-
-### 1. En GitHub Actions (Automatizado)
-
-El workflow de CI/CD llama al Makefile automáticamente:
-```yaml
-# .github/workflows/deploy-lambda.yml
-- name: Build Lambda Layer
-  run: |
-    make build-layer
-```
-
-Este proceso ocurre:
-- Cuando se hace push a la rama main
-- Cuando se activa manualmente el workflow (workflow_dispatch)
-
-### 2. Desarrollo Local (Manual)
-
-Los desarrolladores usan el Makefile para tareas comunes:
-
+#### 3. Rotación de Secretos
 ```bash
-# Instalar dependencias de las funciones
-make install-deps
+# Script para rotación
+#!/bin/bash
+NEW_SECRET=$(openssl rand -base64 32)
+aws secretsmanager update-secret \
+  --secret-id auth/token/secret \
+  --secret-string $NEW_SECRET
 
-# Construir la Layer con las dependencias compartidas
-make build-layer
-
-# Construir el proyecto completo
-make build
-
-# Desplegar a AWS
-make deploy
-
-# Limpiar archivos generados
-make clean
+# Actualizar GitHub Secret vía API
+curl -X PUT \
+  -H "Authorization: token ${GITHUB_TOKEN}" \
+  -H "Accept: application/vnd.github.v3+json" \
+  https://api.github.com/repos/owner/repo/actions/secrets/AUTH_TOKEN_SECRET \
+  -d "{\"encrypted_value\":\"${NEW_SECRET}\"}"
 ```
 
-### Cuándo Usar Cada Comando
+## 📊 Monitoreo y Observabilidad
 
-1. **make install-deps**:
-   - Al iniciar el proyecto por primera vez
-   - Cuando se añaden nuevas dependencias específicas a una función
-   - Después de clonar el repositorio
+### CloudWatch Logs
 
-2. **make build-layer**:
-   - Cuando se modifican las dependencias compartidas en layers/requirements.txt
-   - Antes de hacer un despliegue local
-   - Para probar la instalación de dependencias
+#### 1. Configuración de Logs
+```yaml
+Globals:
+  Function:
+    LoggingConfig:
+      LogFormat: JSON
+      LogGroup: !Sub "/aws/lambda/${AWS::StackName}"
+```
 
-3. **make build**:
-   - Antes de hacer un despliegue local
-   - Para verificar que todo compila correctamente
-   - Cuando se modifican las funciones Lambda
+#### 2. Estructura de Logs
+```json
+{
+  "timestamp": "2023-10-20T10:15:30.123Z",
+  "level": "INFO",
+  "service": "token_generator",
+  "function_name": "generate_tokens",
+  "request_id": "1234-5678",
+  "message": "Tokens generados exitosamente",
+  "details": {
+    "user_id": "123",
+    "token_type": "access"
+  }
+}
+```
 
-4. **make deploy**:
-   - Para desplegar manualmente a AWS
-   - Cuando se necesita probar en el ambiente de AWS
-   - Después de hacer cambios locales
+#### 3. Consultas de Logs
+```sql
+fields @timestamp, @message
+| filter level = 'ERROR'
+| sort @timestamp desc
+| limit 20
+```
 
-5. **make clean**:
-   - Cuando se quiere limpiar archivos generados
-   - Si hay problemas de caché
-   - Antes de un rebuild completo
+### AWS X-Ray
 
-### Flujo de Trabajo Típico
+#### 1. Configuración
+```yaml
+Globals:
+  Function:
+    Tracing: Active
+  Api:
+    TracingEnabled: true
+```
 
-1. **Desarrollo Inicial**:
-   ```bash
-   make install-deps
-   make build-layer
-   make build
-   make deploy
-   ```
+#### 2. Anotaciones en Código
+```python
+from aws_lambda_powertools import Tracer
 
-2. **Cambios en Dependencias Compartidas**:
-   ```bash
-   make clean
-   make build-layer
-   make build
-   make deploy
-   ```
+tracer = Tracer()
 
-3. **Cambios en Código de Funciones**:
-   ```bash
-   make build
-   make deploy
-   ```
+@tracer.capture_method
+def process_request(event):
+    # Añadir metadatos
+    tracer.put_annotation(key="user_id", value=event["user_id"])
+    tracer.put_metadata(key="request_body", value=event)
+    
+    # Proceso normal
+    result = do_something()
+    return result
+```
 
-4. **Solución de Problemas**:
-   ```bash
-   make clean
-   make install-deps
-   make build-layer
-   make build
-   make deploy
-   ```
+### CloudWatch Metrics
 
-### Notas Importantes
+#### 1. Métricas Estándar
+- Invocations
+- Errors
+- Duration
+- Throttles
+- ConcurrentExecutions
 
-1. **Orden de Ejecución**:
-   - Siempre construir la layer antes del build general
-   - Limpiar antes de reconstruir si hay problemas
-   - Instalar dependencias antes de construir
+#### 2. Métricas Personalizadas
+```python
+from aws_lambda_powertools.metrics import MetricUnit, metrics
 
-2. **GitHub Actions vs Local**:
-   - GitHub Actions ejecuta los comandos automáticamente
-   - Localmente se ejecutan manualmente según necesidad
-   - Mismo resultado final en ambos casos
+metrics.add_metric(name="TokensGenerated", unit=MetricUnit.Count, value=1)
+metrics.add_dimension(name="Environment", value="prod")
+```
 
-3. **Permisos y Configuración**:
-   - Asegurar que AWS CLI está configurado localmente
-   - Tener los permisos necesarios en AWS
-   - Configurar variables de ambiente necesarias
+#### 3. Dashboard
+```yaml
+  MonitoringDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub ${AWS::StackName}-dashboard
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${TokenGeneratorFunction}"]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "title": "Token Generator Invocations"
+              }
+            }
+          ]
+        }
+```
+
+## 🛠️ Solución de Problemas
+
+### Errores de Autenticación
+
+#### 1. Token Expirado
+```python
+try:
+    decoded = jwt.decode(token, secret, algorithms=['HS256'])
+except jwt.ExpiredSignatureError:
+    logger.warning(f"Token expirado para usuario: {user_id}")
+    return {
+        "statusCode": 401,
+        "body": {
+            "error": "token_expired",
+            "error_description": "El token ha expirado"
+        }
+    }
+```
+
+#### 2. Token Inválido
+```python
+try:
+    if not auth_header.startswith('Bearer '):
+        raise ValueError("Formato inválido")
+    
+    token = auth_header.split(' ')[1]
+    decoded = jwt.decode(token, secret, algorithms=['HS256'])
+    
+    if decoded.get('type') != 'access':
+        raise ValueError("Tipo de token incorrecto")
+        
+except (jwt.InvalidTokenError, ValueError) as e:
+    logger.error(f"Error de token: {str(e)}")
+    return {
+        "statusCode": 401,
+        "body": {
+            "error": "invalid_token",
+            "error_description": str(e)
+        }
+    }
+```
+
+### Errores de Despliegue
+
+#### 1. Stack Creation Failed
+```bash
+# Verificar estado del stack
+aws cloudformation describe-stack-events \
+  --stack-name lambdas-init \
+  --query 'StackEvents[?ResourceStatus==`CREATE_FAILED`]'
+
+# Limpiar recursos fallidos
+aws cloudformation delete-stack --stack-name lambdas-init
+aws cloudformation wait stack-delete-complete --stack-name lambdas-init
+```
+
+#### 2. Layer Build Failed
+```bash
+# Verificar dependencias
+pip check
+
+# Limpiar build anterior
+rm -rf .aws-sam/build/
+rm -rf layers/python/
+
+# Reconstruir layer
+pip install -r layers/requirements.txt -t layers/python/
+```
+
+### Problemas Comunes
+
+#### 1. CORS
+```python
+def add_cors_headers(response):
+    response["headers"] = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS"
+    }
+    return response
+
+def lambda_handler(event, context):
+    try:
+        # Manejar OPTIONS para CORS
+        if event["httpMethod"] == "OPTIONS":
+            return add_cors_headers({
+                "statusCode": 200,
+                "body": ""
+            })
+            
+        # Proceso normal
+        result = process_request(event)
+        return add_cors_headers(result)
+        
+    except Exception as e:
+        return add_cors_headers({
+            "statusCode": 500,
+            "body": {"error": str(e)}
+        })
+```
+
+#### 2. Timeout
+```yaml
+  SlowFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 60  # Aumentar timeout
+      MemorySize: 512  # Aumentar memoria
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            TimeoutInMillis: 29000  # Timeout API Gateway
+```
+
+#### 3. Memoria
+```python
+import psutil
+
+def monitor_memory():
+    process = psutil.Process()
+    memory_info = process.memory_info()
+    
+    logger.info({
+        "memory_used_mb": memory_info.rss / 1024 / 1024,
+        "memory_percent": process.memory_percent()
+    })
+
+@logger.inject_lambda_context
+def lambda_handler(event, context):
+    monitor_memory()  # Inicio
+    result = process_heavy_task()
+    monitor_memory()  # Fin
+    return result
+```
