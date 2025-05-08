@@ -153,6 +153,24 @@ Resources:
             Path: /process
             Method: post
 
+  RegisterPayment:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-register-payment
+      Description: Register payment processing function
+      CodeUri: src/payment/
+      Handler: app.register_payment_handler
+      MemorySize: 512
+      Timeout: 60
+      Layers:
+        - !Ref CommonDependenciesLayer
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /register-payment
+            Method: post
+
 Outputs:
   ApiEndpoint:
     Description: API Gateway endpoint URL for Prod stage
