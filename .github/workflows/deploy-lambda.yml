@@ -25,9 +25,9 @@ on:
         default: 'dev'
         type: choice
         options:
-        - dev
-        - staging
-        - prod
+          - dev
+          - staging
+          - prod
       debug:
         description: 'Enable debug logging'
         required: false
@@ -37,15 +37,40 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
           cache: 'pip'
-          
+          cache-dependency-path: |
+            **/requirements.txt
+            layers/requirements.txt
+
+      - name: Cache SAM builds
+        uses: actions/cache@v3
+        with:
+          path: |
+            .aws-sam
+            ~/.aws-sam
+          key: ${{ runner.os }}-sam-${{ hashFiles('**/*.py', 'template.yaml', 'layers/requirements.txt', 'src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-sam-${{ hashFiles('template.yaml') }}
+            ${{ runner.os }}-sam-
+
+      - name: Cache system dependencies
+        uses: actions/cache@v3
+        with:
+          path: /var/cache/apt
+          key: ${{ runner.os }}-apt-${{ hashFiles('**/deploy-lambda.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -56,92 +81,212 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --upgrade setuptools wheel
           python -m pip install aws-sam-cli
+
       - name: Verify Project Structure
         run: |
-          echo "Verificando estructura del proyecto..."
+          echo "🔍 Verificando estructura del proyecto..."
           if [ ! -d "layers" ]; then
-            echo "Error: Directorio 'layers' no encontrado"
+            echo "❌ Error: Directorio 'layers' no encontrado"
             exit 1
           fi
           if [ ! -d "layers/python" ]; then
-            echo "Creando directorio layers/python..."
+            echo "📁 Creando directorio layers/python..."
             mkdir -p layers/python
           fi
           if [ ! -f "layers/requirements.txt" ]; then
-            echo "Error: Archivo layers/requirements.txt no encontrado"
+            echo "❌ Error: Archivo layers/requirements.txt no encontrado"
             exit 1
           fi
-          echo "Estructura del proyecto:"
+          echo "📋 Estructura del proyecto:"
           tree -a -I '.git|.aws-sam'
+
       - name: Build Lambda Layer
         run: |
-          echo "Building Lambda Layer..."
+          echo "🔨 Building Lambda Layer..."
           pip install -r layers/requirements.txt -t layers/python/
           if [ -f "Makefile" ]; then
             make build-layer
           fi
 
+      - name: Install Development Dependencies
+        run: |
+          echo "📦 Instalando dependencias de desarrollo..."
+          python -m pip install pytest flake8 black safety
+
+      - name: Run Python Tests
+        run: |
+          echo "🧪 Ejecutando pruebas..."
+          python -m pytest tests/ -v || {
+            echo "❌ Tests failed. Check the test output above."
+            exit 1
+          }
+
+      - name: Check Python Code Style
+        run: |
+          echo "🔍 Verificando estilo de código..."
+          flake8 src/ layers/ || {
+            echo "❌ Flake8 encontró problemas de estilo. Por favor, corrígelos."
+            exit 1
+          }
+          black --check src/ layers/ || {
+            echo "❌ Black encontró problemas de formato. Por favor, ejecuta 'black' localmente."
+            exit 1
+          }
+
+      - name: Check for vulnerabilities
+        run: |
+          echo "🔒 Verificando vulnerabilidades conocidas..."
+          safety check || {
+            echo "⚠️ Se encontraron vulnerabilidades de seguridad. Revisa el reporte."
+            exit 1
+          }
+
+      - name: Validate SAM template
+        run: |
+          echo "📝 Validando template SAM..."
+          sam validate --lint
+
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+          permissions-boundary: ${{ secrets.AWS_PERMISSIONS_BOUNDARY }}
+
+      - name: Set Environment Variables
+        run: |
+          echo "STACK_NAME=lambdas-init-${{ github.event.inputs.environment || 'dev' }}" >> $GITHUB_ENV
+          echo "ENVIRONMENT=${{ github.event.inputs.environment || 'dev' }}" >> $GITHUB_ENV
+          echo "DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Check and Delete Failed Stack
         run: |
-          if aws cloudformation describe-stacks --stack-name lambdas-init 2>/dev/null | grep -q 'ROLLBACK_COMPLETE'; then
-            echo "Deleting failed stack..."
-            aws cloudformation delete-stack --stack-name lambdas-init
-            aws cloudformation wait stack-delete-complete --stack-name lambdas-init
+          if aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} 2>/dev/null | grep -q 'ROLLBACK_COMPLETE'; then
+            echo "🗑️ Eliminando stack fallido anterior..."
+            aws cloudformation delete-stack --stack-name ${{ env.STACK_NAME }}
+            aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }}
           fi
 
       - name: SAM Build
         run: |
-          echo "Running SAM build..."
+          echo "🔨 Iniciando SAM build..."
           sam build --use-container
-          echo "SAM build complete. Contents of .aws-sam:"
+          echo "✅ SAM build completado. Contenido de .aws-sam:"
           ls -la .aws-sam/
+
+      - name: Enable Debug Mode
+        if: ${{ github.event.inputs.debug == 'true' }}
+        run: |
+          echo "🐛 Modo debug activado"
+          set -x
 
       - name: SAM Deploy
         run: |
-          echo "Starting SAM deploy..."
+          echo "🚀 Iniciando despliegue para ambiente: ${{ env.ENVIRONMENT }}"
           
-          # Ejecutar SAM deploy con --resolve-s3 para crear un bucket automáticamente
           sam deploy \
             --template-file .aws-sam/build/template.yaml \
-            --stack-name lambdas-init \
+            --stack-name ${{ env.STACK_NAME }} \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --force-upload \
             --no-progressbar \
-            --capabilities CAPABILITY_IAM \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --region "${{ secrets.AWS_REGION }}" \
             --resolve-s3 \
-            --parameter-overrides "AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}" 2>&1 || true
+            --tags \
+              Environment=${{ env.ENVIRONMENT }} \
+              Project=lambdas-init \
+              ManagedBy=GitHub-Actions \
+              LastDeployedBy=${{ github.actor }} \
+              LastDeployedAt=${{ env.DEPLOY_TIMESTAMP }} \
+            --parameter-overrides \
+              Environment=${{ env.ENVIRONMENT }} \
+              AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}
+
+      - name: Monitor Deployment
+        run: |
+          MAX_RETRIES=6
+          RETRY_INTERVAL=10
+          RETRY_COUNT=0
           
-          # Esperar un momento para asegurar que el stack se actualice
-          sleep 10
-          
-          # Verificar el estado del stack
-          STACK_STATUS=$(aws cloudformation describe-stacks \
-            --stack-name lambdas-init \
-            --query 'Stacks[0].StackStatus' \
-            --output text)
-          
-          echo "Estado actual del stack: $STACK_STATUS"
-          
-          # Verificar si el estado es exitoso
-          if [[ "$STACK_STATUS" == *"COMPLETE"* && "$STACK_STATUS" != *"ROLLBACK"* ]]; then
-            echo "Despliegue exitoso. Obteniendo información del stack..."
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            STACK_STATUS=$(aws cloudformation describe-stacks \
+              --stack-name ${{ env.STACK_NAME }} \
+              --query 'Stacks[0].StackStatus' \
+              --output text)
             
-            # Mostrar los outputs del stack
-            echo "Outputs del stack:"
-            aws cloudformation describe-stacks \
-              --stack-name lambdas-init \
-              --query 'Stacks[0].Outputs' \
-              --output table
-          else
-            echo "Error en el despliegue. Estado final: $STACK_STATUS"
-            exit 1
-          fi
+            echo "🔄 Estado actual del stack (intento $((RETRY_COUNT + 1))/$MAX_RETRIES): $STACK_STATUS"
+            
+            if [[ "$STACK_STATUS" == *"COMPLETE"* && "$STACK_STATUS" != *"ROLLBACK"* ]]; then
+              echo "✅ ¡Despliegue exitoso!"
+              
+              echo "📋 Outputs del stack:"
+              aws cloudformation describe-stacks \
+                --stack-name ${{ env.STACK_NAME }} \
+                --query 'Stacks[0].Outputs' \
+                --output table
+              
+              echo "🔍 Verificando recursos desplegados..."
+              
+              echo "📊 Funciones Lambda:"
+              aws lambda list-functions \
+                --query "Functions[?contains(FunctionName, '${{ env.STACK_NAME }}')].[FunctionName,Runtime,LastModified]" \
+                --output table
+              
+              echo "🌐 APIs Gateway (si existen):"
+              aws apigateway get-rest-apis \
+                --query "items[?contains(name, '${{ env.STACK_NAME }}')].[name,id,createdDate]" \
+                --output table || true
+              
+              echo "💾 Tablas DynamoDB (si existen):"
+              aws dynamodb list-tables \
+                --query "TableNames[?contains(@, '${{ env.STACK_NAME }}')]" \
+                --output table || true
+              
+              exit 0
+            elif [[ "$STACK_STATUS" == *"FAILED"* || "$STACK_STATUS" == *"ROLLBACK"* ]]; then
+              echo "❌ Error en el despliegue. Estado final: $STACK_STATUS"
+              
+              echo "📋 Últimos eventos del stack:"
+              aws cloudformation describe-stack-events \
+                --stack-name ${{ env.STACK_NAME }} \
+                --query 'StackEvents[0:5].[ResourceStatus,ResourceStatusReason,LogicalResourceId]' \
+                --output table
+              
+              echo "⚠️ Recursos que pudieron causar el fallo:"
+              aws cloudformation list-stack-resources \
+                --stack-name ${{ env.STACK_NAME }} \
+                --query 'StackResourceSummaries[?ResourceStatus!=`CREATE_COMPLETE`].[LogicalResourceId,ResourceStatus,ResourceStatusReason]' \
+                --output table
+              
+              exit 1
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "⏳ Esperando $RETRY_INTERVAL segundos antes del siguiente intento..."
+              sleep $RETRY_INTERVAL
+            fi
+          done
+          
+          echo "❌ Timeout esperando la finalización del stack"
+          exit 1
+
+      - name: Cleanup on Failure
+        if: failure()
+        run: |
+          echo "🧹 Limpiando recursos en caso de fallo..."
+          
+          # Guardar logs antes de limpiar
+          aws cloudformation describe-stack-events \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query 'StackEvents[].[Timestamp,ResourceStatus,ResourceStatusReason]' \
+            --output table > stack_events.log || true
+          
+          # Intentar eliminar el stack si existe
+          aws cloudformation delete-stack --stack-name ${{ env.STACK_NAME }} || true
+          
+          echo "📋 Los eventos del stack han sido guardados en stack_events.log"
+          echo "❌ El despliegue falló. Por favor, revise los logs para más detalles."
