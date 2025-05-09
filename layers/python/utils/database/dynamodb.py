@@ -1,11 +1,10 @@
 import boto3
 from typing import Dict, Any, List, Optional
 from botocore.exceptions import ClientError
-from aws_lambda_powertools import Logger
+from utils.logger import get_logger
 from decimal import Decimal
 import json
 
-logger = Logger()
 dynamodb = boto3.resource('dynamodb')
 
 class DynamoDBClient:
@@ -19,7 +18,7 @@ class DynamoDBClient:
             table_name (str): Nombre de la tabla DynamoDB
         """
         self.table = dynamodb.Table(table_name)
-        self.logger = logger.append_keys(table=table_name)
+        self.logger = get_logger("dynamodb_client").append_keys(table=table_name)
 
     def _handle_decimal(self, obj: Any) -> Any:
         """

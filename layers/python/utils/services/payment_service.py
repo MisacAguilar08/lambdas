@@ -1,11 +1,9 @@
 from typing import Dict, Any, Optional, List
-from aws_lambda_powertools import Logger
 from utils.database.dynamodb import DynamoDBClient
+from utils.logger import get_logger
 from decimal import Decimal
 import uuid
 from datetime import datetime
-
-logger = Logger()
 
 class PaymentService:
     """
@@ -16,7 +14,7 @@ class PaymentService:
     def __init__(self):
         """Inicializa el servicio con su cliente DynamoDB."""
         self.db_client = DynamoDBClient('payments')
-        self.logger = logger.append_keys(service="payment_service")
+        self.logger = get_logger("payment_service")
 
     def _validate_payment_data(self, payment_data: Dict[str, Any]) -> tuple[bool, Optional[str]]:
         """

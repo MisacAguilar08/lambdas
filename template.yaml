@@ -170,7 +170,7 @@ Resources:
       FunctionName: !Sub ${AWS::StackName}-register-payment
       Description: Register payment processing function
       CodeUri: src/payment/
-      Handler: app.register_payment_handler
+      Handler: register_payment.lambda_handler
       MemorySize: 512
       Timeout: 60
       Layers:
