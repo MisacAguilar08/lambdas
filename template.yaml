@@ -5,6 +5,14 @@ Description: >
   Includes token generation, authorization, and protected endpoints.
 
 Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment stage for deployment
   AuthTokenSecret:
     Type: String
     NoEcho: true
@@ -177,7 +185,7 @@ Resources:
 Outputs:
   ApiEndpoint:
     Description: API Gateway endpoint URL for Prod stage
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/"
 
   LayerArn:
     Description: ARN of the common dependencies layer
@@ -202,3 +210,7 @@ Outputs:
   TokenGeneratorArn:
     Description: ARN of the Token Generator Lambda function
     Value: !GetAtt TokenGeneratorFunction.Arn
+
+  RegisterPaymentArn:
+    Description: ARN of the Register Payment Lambda function
+    Value: !GetAtt RegisterPayment.Arn
