@@ -104,10 +104,10 @@ class PaymentService:
             
             # Enriquecer datos
             enriched_payment = self._enrich_payment_data(payment_data)
-            
+            self.logger.info("Datos de pago enriquecidos correctamente", extra={'payment_data': enriched_payment})
             # Registrar en DB
             result = self.db_client.insert_item(enriched_payment)
-            
+            self.logger.debug("Resultado de la operación de inserción en la base de datos", extra={'result': result})
             if not result['success']:
                 return {
                     'success': False,
