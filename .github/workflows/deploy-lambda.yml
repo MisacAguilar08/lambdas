@@ -195,6 +195,7 @@ jobs:
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --region "${{ secrets.AWS_REGION }}" \
             --resolve-s3 \
+            --parameter-overrides "AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}" \
             --tags "Environment=${{ env.ENVIRONMENT }}" "Project=lambdas-init" "DeployTimestamp=${{ env.DEPLOY_TIMESTAMP }}"
               ManagedBy=GitHub-Actions \
               LastDeployedBy=${{ github.actor }} \
