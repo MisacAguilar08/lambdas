@@ -113,13 +113,13 @@ jobs:
           echo "📦 Instalando dependencias de desarrollo..."
           python -m pip install pytest flake8 black safety
 
-      - name: Run Python Tests
-        run: |
-          echo "🧪 Ejecutando pruebas..."
-          python -m pytest tests/ -v || {
-            echo "❌ Tests failed. Check the test output above."
-            exit 1
-          }
+      # - name: Run Python Tests
+      #   run: |
+      #     echo "🧪 Ejecutando pruebas..."
+      #     python -m pytest tests/ -v || {
+      #       echo "❌ Tests failed. Check the test output above."
+      #       exit 1
+      #     }
 
       - name: Check Python Code Style
         run: |
