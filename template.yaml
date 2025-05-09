@@ -200,6 +200,8 @@ Outputs:
   TokenGeneratorFunctionArn:
     Description: ARN of the Token Generator Lambda function
     Value: !GetAtt TokenGeneratorFunction.Arn
+    Description: ARN of the Token Generator Lambda function
+    Value: !GetAtt TokenGeneratorFunction.Arn
     Value: !GetAtt CustomAuthorizerFunction.Arn
 
   TokenGeneratorFunctionArn:
