@@ -103,13 +103,22 @@ Resources:
       Environment:
         Variables:
           AUTH_TOKEN_SECRET: !Ref AuthTokenSecret
+          POWERTOOLS_SERVICE_NAME: token_generator
       Policies:
         - AWSLambdaBasicExecutionRole
-        - Statement:
+        - Version: '2012-10-17'
+          Statement:
             - Effect: Allow
               Action:
                 - 'ssm:GetParameter'
-              Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/auth/token/time'
+              Resource: 
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/auth/token/time'
+            - Effect: Allow
+              Action:
+                - 'ssm:GetParameter'
+                - 'ssm:GetParameters'
+              Resource: 
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*'
       Events:
         ApiEvent:
           Type: Api
