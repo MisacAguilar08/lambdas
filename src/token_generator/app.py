@@ -78,7 +78,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Genera tokens JWT para autenticación o refresca access_token
     """
     try:
-        token_time = get_parameter('/auth/token/time')
+        token_time = get_parameter(os.environ['SSM_TOKEN_TIME_PATH'])
         print("Tiempo del token:"+token_time)
         body = json.loads(event.get('body', '{}'))
 

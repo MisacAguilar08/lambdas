@@ -1,6 +1,7 @@
 import os
 import jwt
 from typing import Dict, Any
+from utils.ssm.parameter import get_parameter
 
 def generate_policy(principal_id: str, effect: str, resource: str) -> Dict[str, Any]:
     """
@@ -35,6 +36,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Validar el token
         secret = os.environ.get('AUTH_TOKEN_SECRET')
+        token_time = get_parameter(os.environ['SSM_TOKEN_TIME_PATH'])
         decoded = jwt.decode(token, secret, algorithms=['HS256'])
         
         # Verificar que sea un access_token
