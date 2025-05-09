@@ -182,22 +182,8 @@ jobs:
           set -x
 
       - name: SAM Deploy
-        run: >
-          sam deploy
-          --template-file .aws-sam/build/template.yaml
-          --stack-name ${{ env.STACK_NAME }}
-          --no-confirm-changeset
-          --no-fail-on-empty-changeset
-          --force-upload
-          --no-progressbar
-          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
-          --region "${{ secrets.AWS_REGION }}"
-          --resolve-s3
-          --parameter-overrides "AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}"
-          --tags "Environment=${{ env.ENVIRONMENT }}"
-          --tags "Project=lambdas-init"
-          --tags "DeployTimestamp=${{ env.DEPLOY_TIMESTAMP }}"
-          --tags "ManagedBy=GitHub-Actions"
+        shell: bash
+        run: sam deploy --template-file .aws-sam/build/template.yaml --stack-name ${{ env.STACK_NAME }} --no-confirm-changeset --no-fail-on-empty-changeset --force-upload --no-progressbar --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region "${{ secrets.AWS_REGION }}" --resolve-s3 --parameter-overrides "AuthTokenSecret=${{ secrets.AUTH_TOKEN_SECRET }}" --tags Environment=${{ env.ENVIRONMENT }} Project=lambdas-init DeployTimestamp=${{ env.DEPLOY_TIMESTAMP }} ManagedBy=GitHub-Actions
               LastDeployedBy=${{ github.actor }} \
               LastDeployedAt=${{ env.DEPLOY_TIMESTAMP }} \
             --parameter-overrides \
