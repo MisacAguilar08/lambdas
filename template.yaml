@@ -135,6 +135,8 @@ Resources:
           Properties:
             Path: /hello
             Method: get
+            Auth:
+              Authorizer: NONE
 
   ProcessDataFunction:
     Type: AWS::Serverless::Function
