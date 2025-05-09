@@ -4,3 +4,4 @@ pytz==2023.3
 PyJWT==2.8.0
 pytest
 boto3
+aws_lambda_powertools==1.28.0
