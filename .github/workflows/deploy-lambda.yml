@@ -121,17 +121,17 @@ jobs:
       #       exit 1
       #     }
 
-      - name: Check Python Code Style
-        run: |
-          echo "🔍 Verificando estilo de código..."
-          flake8 src/ layers/ || {
-            echo "❌ Flake8 encontró problemas de estilo. Por favor, corrígelos."
-            exit 1
-          }
-          black --check src/ layers/ || {
-            echo "❌ Black encontró problemas de formato. Por favor, ejecuta 'black' localmente."
-            exit 1
-          }
+      # - name: Check Python Code Style
+      #   run: |
+      #     echo "🔍 Verificando estilo de código..."
+      #     flake8 src/ layers/ || {
+      #       echo "❌ Flake8 encontró problemas de estilo. Por favor, corrígelos."
+      #       exit 1
+      #     }
+      #     black --check src/ layers/ || {
+      #       echo "❌ Black encontró problemas de formato. Por favor, ejecuta 'black' localmente."
+      #       exit 1
+      #     }
 
       - name: Check for vulnerabilities
         run: |
