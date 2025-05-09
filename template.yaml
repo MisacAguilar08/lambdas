@@ -177,33 +177,26 @@ Outputs:
     Description: API Gateway endpoint URL for Prod stage
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
 
-  CommonDependenciesLayerArn:
+  LayerArn:
     Description: ARN of the common dependencies layer
     Value: !Ref CommonDependenciesLayer
 
-  CommonDependenciesLayerVersion:
+  LayerVersion:
     Description: Latest version of the common dependencies layer
     Value: !Ref CommonDependenciesLayer
 
-  HelloWorldFunctionArn:
+  HelloWorldArn:
     Description: ARN of the Hello World Lambda function
     Value: !GetAtt HelloWorldFunction.Arn
 
-  ProcessDataFunctionArn:
+  ProcessDataArn:
     Description: ARN of the Process Data Lambda function
     Value: !GetAtt ProcessDataFunction.Arn
 
-  CustomAuthorizerFunctionArn:
+  AuthorizerArn:
     Description: ARN of the Custom Authorizer Lambda function
     Value: !GetAtt CustomAuthorizerFunction.Arn
 
-  TokenGeneratorFunctionArn:
-    Description: ARN of the Token Generator Lambda function
-    Value: !GetAtt TokenGeneratorFunction.Arn
-    Description: ARN of the Token Generator Lambda function
-    Value: !GetAtt TokenGeneratorFunction.Arn
-    Value: !GetAtt CustomAuthorizerFunction.Arn
-
-  TokenGeneratorFunctionArn:
+  TokenGeneratorArn:
     Description: ARN of the Token Generator Lambda function
     Value: !GetAtt TokenGeneratorFunction.Arn
