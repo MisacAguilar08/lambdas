@@ -7,7 +7,7 @@ logger = get_logger("payment_handler")
 payment_service = PaymentService()
 
 @logger.inject_lambda_context
-async def lambda_handler(event: dict, context: LambdaContext) -> dict:
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """
     Handler para el registro de pagos.
     Delega toda la lógica de negocio al PaymentService.
@@ -24,7 +24,7 @@ async def lambda_handler(event: dict, context: LambdaContext) -> dict:
             body['user_agent'] = identity.get('userAgent')
         
         # Delegar al servicio
-        result = await payment_service.register_payment(body)
+        result = payment_service.register_payment(body)
         
         # Mapear respuesta al formato API Gateway
         status_code = 201 if result['success'] else 400

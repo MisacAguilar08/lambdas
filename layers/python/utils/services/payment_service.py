@@ -81,7 +81,7 @@ class PaymentService:
         
         return enriched_data
 
-    async def register_payment(self, payment_data: Dict[str, Any]) -> Dict[str, Any]:
+    def register_payment(self, payment_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Registra un nuevo pago.
         
@@ -139,7 +139,7 @@ class PaymentService:
                 'error_code': 'INTERNAL_ERROR'
             }
 
-    async def get_payment(self, payment_id: str) -> Dict[str, Any]:
+    def get_payment(self, payment_id: str) -> Dict[str, Any]:
         """
         Obtiene los detalles de un pago.
         
@@ -176,7 +176,7 @@ class PaymentService:
                 'error_code': 'INTERNAL_ERROR'
             }
 
-    async def update_payment_status(
+    def update_payment_status(
         self,
         payment_id: str,
         new_status: str,
@@ -248,7 +248,7 @@ class PaymentService:
                 'error_code': 'INTERNAL_ERROR'
             }
 
-    async def list_payments(
+    def list_payments(
         self,
         status: Optional[str] = None,
         start_date: Optional[str] = None,
