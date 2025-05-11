@@ -177,7 +177,7 @@ Resources:
         - !Ref CommonDependenciesLayer      
       Environment:
         Variables:
-          AWS_REGION: !Ref AWS::Region
+          REGION: !Ref AWS::Region
           DYNAMODB_TABLE: !Ref PaymentsTable  
       Policies:
         - AWSLambdaBasicExecutionRole

@@ -7,7 +7,7 @@ import json
 import os
 
 # Configuración de la región si no está definida
-region = os.environ.get('AWS_REGION', 'us-east-1')
+region = os.environ.get('REGION', 'us-east-1')
 dynamodb = boto3.resource('dynamodb', region_name=region)
 
 class DynamoDBClient:
