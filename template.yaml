@@ -176,18 +176,9 @@ Resources:
       Layers:
         - !Ref CommonDependenciesLayer
       Policies:
-        - Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:PutItem
-                - dynamodb:GetItem
-                - dynamodb:UpdateItem
-                - dynamodb:DeleteItem
-                - dynamodb:Scan
-                - dynamodb:Query
-                - dynamodb:DescribeTable
-              Resource: !GetAtt PaymentsTable.Arn
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PaymentsTable
       Events:
         ApiEvent:
           Type: Api
