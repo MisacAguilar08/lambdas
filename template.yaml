@@ -174,7 +174,8 @@ Resources:
       MemorySize: 512
       Timeout: 60
       Layers:
-        - !Ref CommonDependenciesLayer      Environment:
+        - !Ref CommonDependenciesLayer      
+      Environment:
         Variables:
           AWS_REGION: !Ref AWS::Region
           DYNAMODB_TABLE: !Ref PaymentsTable  
