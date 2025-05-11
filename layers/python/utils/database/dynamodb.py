@@ -4,8 +4,11 @@ from botocore.exceptions import ClientError
 from utils.logger import get_logger
 from decimal import Decimal
 import json
+import os
 
-dynamodb = boto3.resource('dynamodb')
+# Configuración de la región si no está definida
+region = os.environ.get('AWS_REGION', 'us-east-1')
+dynamodb = boto3.resource('dynamodb', region_name=region)
 
 class DynamoDBClient:
     """Cliente para operaciones en DynamoDB con manejo de errores y logging."""
