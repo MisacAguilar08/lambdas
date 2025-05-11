@@ -56,22 +56,24 @@ class DynamoDBClient:
             ClientError: Si ocurre un error en la operación
         """
         try:
-            self.logger.info("Iniciando la operación de inserción en la base de datos")
+            # self.logger.info("Iniciando la operación de inserción en la base de datos")
+            print("Iniciando la operación de inserción en la base de datos")
             params = {
                 'Item': item
             }
 
-            self.logger.info("Preparando los parámetros para la inserción:",params)
-            
+            # self.logger.info("Preparando los parámetros para la inserción:",params)
+            print("Preparando los parámetros para la inserción:",params)
             if condition:
                 params['ConditionExpression'] = condition
                 
             response = self.table.put_item(**params)
-            self.logger.info("Operación de inserción completada exitosamente", response)
-            self.logger.info("Item insertado exitosamente", extra={
-                'item_id': item.get('id'),
-                'operation': 'insert'
-            })
+            # self.logger.info("Operación de inserción completada exitosamente", response)
+            print("Operación de inserción completada exitosamente", response)
+            # self.logger.info("Item insertado exitosamente", extra={
+            #     'item_id': item.get('id'),
+            #     'operation': 'insert'
+            # })
             
             return {
                 'success': True,
