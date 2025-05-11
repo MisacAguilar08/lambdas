@@ -198,7 +198,7 @@ Resources:
   PaymentsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub ${AWS::StackName}-payments
+      TableName: payments
       AttributeDefinitions:
         - AttributeName: id
           AttributeType: S
