@@ -68,6 +68,7 @@ class PaymentService:
         enriched_data = {
             **payment_data,
             'id': str(uuid.uuid4()),
+            'user': payment_data.get('sub'),
             'status': 'pending',
             'created_at': now,
             'updated_at': now,
