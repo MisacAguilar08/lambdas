@@ -1,9 +1,15 @@
 import json
+import os
 from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools import Logger
 from utils.services.payment_service import PaymentService
-from utils.logger import get_logger
+from utils.config.logging_config import configure_logging
 
-logger = get_logger("payment_handler")
+# Configurar logging
+configure_logging()
+
+# Configuración del logger
+logger = Logger(service="payment_handler")
 payment_service = PaymentService()
 
 @logger.inject_lambda_context

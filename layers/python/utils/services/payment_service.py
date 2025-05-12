@@ -67,7 +67,7 @@ class PaymentService:
         
         enriched_data = {
             **payment_data,
-            'payment_id': str(uuid.uuid4()),
+            'id': str(uuid.uuid4()),
             'status': 'pending',
             'created_at': now,
             'updated_at': now,
@@ -117,14 +117,14 @@ class PaymentService:
                 }
             
             self.logger.info("Pago registrado exitosamente", extra={
-                'payment_id': enriched_payment['payment_id']
+                'payment_id': enriched_payment['id']
             })
             
             return {
                 'success': True,
                 'message': 'Pago registrado exitosamente',
                 'data': {
-                    'payment_id': enriched_payment['payment_id'],
+                    'payment_id': enriched_payment['id'],
                     'status': enriched_payment['status'],
                     'amount': float(enriched_payment['amount']),
                     'currency': enriched_payment['currency']

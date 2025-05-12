@@ -22,6 +22,7 @@ class DynamoDBClient:
         """
         self.table = dynamodb.Table(table_name)
         self.logger = get_logger("dynamodb_client").append_keys(table=table_name)
+        
 
     def _handle_decimal(self, obj: Any) -> Any:
         """
@@ -85,11 +86,13 @@ class DynamoDBClient:
             error_code = e.response['Error']['Code']
             error_message = e.response['Error']['Message']
             
-            self.logger.error("Error insertando item", extra={
-                'error_code': error_code,
-                'error_message': error_message,
-                'item_id': item.get('id')
-            })
+            # self.logger.error("Error insertando item", extra={
+            #     'error_code': error_code,
+            #     'error_message': error_message,
+            #     'item_id': item.get('id')
+            # })
+
+            print(f"Error insertando item: {error_message} (Código: {error_code})")
             
             if error_code == 'ConditionalCheckFailedException':
                 return {

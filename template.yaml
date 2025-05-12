@@ -178,7 +178,14 @@ Resources:
       Environment:
         Variables:
           REGION: !Ref AWS::Region
-          DYNAMODB_TABLE: !Ref PaymentsTable  
+          DYNAMODB_TABLE: !Ref PaymentsTable
+          POWERTOOLS_SERVICE_NAME: payment_service
+          LOG_LEVEL: WARNING
+          POWERTOOLS_LOGGER_LOG_EVENT: false
+          POWERTOOLS_LOGGER_SAMPLE_RATE: 0.1
+          POWERTOOLS_METRICS_NAMESPACE: PaymentAPI
+          BOTO_CORE_LOG_LEVEL: ERROR
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
       Policies:
         - AWSLambdaBasicExecutionRole
         - Version: '2012-10-17'
