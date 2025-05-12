@@ -6,9 +6,25 @@ from decimal import Decimal
 import json
 import os
 
-# Configuración de la región si no está definida
+# Configuración base
 region = os.environ.get('REGION', 'us-east-1')
-dynamodb = boto3.resource('dynamodb', region_name=region)
+dynamodb_endpoint = os.environ.get('DYNAMODB_ENDPOINT')
+
+# Configuración de DynamoDB
+dynamodb_config = {
+    'region_name': region
+}
+
+# Si existe un endpoint personalizado (desarrollo local), agregarlo a la configuración
+if dynamodb_endpoint:
+    dynamodb_config.update({
+        'endpoint_url': dynamodb_endpoint,
+        'aws_access_key_id': 'dummy',
+        'aws_secret_access_key': 'dummy'
+    })
+
+# Inicializar el recurso DynamoDB
+dynamodb = boto3.resource('dynamodb', **dynamodb_config)
 
 class DynamoDBClient:
     """Cliente para operaciones en DynamoDB con manejo de errores y logging."""
