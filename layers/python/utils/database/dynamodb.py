@@ -6,25 +6,9 @@ from decimal import Decimal
 import json
 import os
 
-# Configuración base
+# Configuración de la región si no está definida
 region = os.environ.get('REGION', 'us-east-1')
-dynamodb_endpoint = os.environ.get('DYNAMODB_ENDPOINT')
-
-# Configuración de DynamoDB
-dynamodb_config = {
-    'region_name': region
-}
-
-# Si existe un endpoint personalizado (desarrollo local), agregarlo a la configuración
-if dynamodb_endpoint:
-    dynamodb_config.update({
-        'endpoint_url': dynamodb_endpoint,
-        'aws_access_key_id': 'dummy',
-        'aws_secret_access_key': 'dummy'
-    })
-
-# Inicializar el recurso DynamoDB
-dynamodb = boto3.resource('dynamodb', **dynamodb_config)
+dynamodb = boto3.resource('dynamodb', region_name=region)
 
 class DynamoDBClient:
     """Cliente para operaciones en DynamoDB con manejo de errores y logging."""
@@ -416,38 +400,3 @@ class DynamoDBClient:
                 'message': f'Error en batch {operation}',
                 'error': error_message
             }
-
-# Ejemplo de uso:
-"""
-# Inicializar cliente
-db = DynamoDBClient('mi-tabla')
-
-# Insertar item
-item = {
-    'id': '123',
-    'nombre': 'Ejemplo',
-    'precio': Decimal('99.99')
-}
-result = db.insert_item(item)
-
-# Actualizar item
-key = {'id': '123'}
-updates = {'nombre': 'Nuevo Nombre', 'precio': Decimal('149.99')}
-result = db.update_item(key, updates)
-
-# Eliminar item
-result = db.delete_item(key)
-
-# Consultar items
-query_result = db.query_items(
-    key_condition='id = :id',
-    expression_values={':id': '123'}
-)
-
-# Operación batch
-items = [
-    {'id': '1', 'nombre': 'Item 1'},
-    {'id': '2', 'nombre': 'Item 2'}
-]
-result = db.batch_write(items, 'insert')
-"""
