@@ -1,0 +1,18 @@
+{
+    "version": "2.0",
+    "routeKey": "POST /payments",
+    "rawPath": "/payments",
+    "headers": {
+        "content-type": "application/json"
+    },
+    "body": {
+        "payment_id": "PAY123",
+        "amount": 100.50,
+        "currency": "USD",
+        "description": "Test payment",
+        "customer_id": "CUST456",
+        "payment_method": "credit_card",
+        "status": "pending"
+    },
+    "isBase64Encoded": false
+}

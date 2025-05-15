@@ -126,6 +126,8 @@ python scripts/prepare_layers.py
 4. Construye el proyecto:
 ```bash
 sam build --use-container
+
+sam local start-api --warm-containers EAGER 
 ```
 
 Este método mantiene tu proyecto limpio ya que:

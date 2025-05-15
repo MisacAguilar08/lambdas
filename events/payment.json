@@ -1,0 +1,10 @@
+{
+    "version": "2.0",
+    "routeKey": "POST /payments",
+    "rawPath": "/payments",
+    "headers": {
+        "content-type": "application/json"
+    },
+    "body": "{\"amount\": 100.50, \"currency\": \"USD\", \"payment_method\": \"credit_card\"}",
+    "isBase64Encoded": false
+}
